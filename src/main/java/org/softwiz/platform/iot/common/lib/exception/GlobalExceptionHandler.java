@@ -3,7 +3,7 @@ package org.softwiz.platform.iot.common.lib.exception;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
-import org.softwiz.platform.iot.common.dto.response.ErrorResponse;
+import org.softwiz.platform.iot.common.lib.dto.ErrorResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;

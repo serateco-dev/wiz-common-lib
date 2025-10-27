@@ -6,8 +6,9 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
-import org.softwiz.platform.iot.common.util.ClientIpExtractor;
-import org.softwiz.platform.iot.common.util.MaskingUtil;
+
+import org.softwiz.platform.iot.common.lib.util.ClientIpExtractor;
+import org.softwiz.platform.iot.common.lib.util.MaskingUtil;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
