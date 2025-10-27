@@ -1,3 +1,0 @@
-# Spring Boot Auto Configuration
-org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
-org.softwiz.platform.iot.common.lib.config.CommonLibAutoConfiguration
