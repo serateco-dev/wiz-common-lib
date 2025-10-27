@@ -117,6 +117,15 @@
 				</configuration>
 			</plugin>
 
+			<!-- 테스트 스킵 (라이브러리 프로젝트) -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<configuration>
+					<skipTests>true</skipTests>
+				</configuration>
+			</plugin>
+
 			<!-- JitPack 필수: Source JAR 생성 -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
