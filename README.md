@@ -1,3 +1,5 @@
+
+[![](https://jitpack.io/v/serateco-dev/wiz-common-lib.svg)](https://jitpack.io/#serateco-dev/wiz-common-lib)
 # WIZ-COMMON-LIB
 
 [![](https://jitpack.io/v/yourusername/wiz-lib.svg)](https://jitpack.io/#yourusername/wiz-lib)
