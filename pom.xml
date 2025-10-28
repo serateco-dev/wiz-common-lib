@@ -42,6 +42,13 @@
 			<scope>provided</scope>
 		</dependency>
 
+		<!-- Spring JDBC (provided) - DAO 예외 처리용 추가 -->
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-jdbc</artifactId>
+			<scope>provided</scope>
+		</dependency>
+
 		<!-- JWT -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>
