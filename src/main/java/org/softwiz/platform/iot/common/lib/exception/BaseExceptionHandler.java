@@ -70,19 +70,24 @@ public abstract class BaseExceptionHandler {
 
     /**
      * 비즈니스 예외 (공통)
+     *
+     * BusinessException에서 제공하는 HttpStatus 사용
+     * 기본값은 500, 필요시 예외 생성 시 HttpStatus 지정 가능
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(
             BusinessException ex,
             WebRequest request) {
 
-        HttpStatus status = determineHttpStatus(ex.getCode());
+        HttpStatus status = ex.getHttpStatus();
         String path = extractPath(request);
 
         if (status.is4xxClientError()) {
-            log.warn("Business error: {} - {} (Code: {})", path, ex.getMessage(), ex.getCode());
+            log.warn("Business error: {} - {} (Code: {}, Status: {})",
+                    path, ex.getMessage(), ex.getCode(), status.value());
         } else {
-            log.error("Business error: {} - {} (Code: {})", path, ex.getMessage(), ex.getCode(), ex);
+            log.error("Business error: {} - {} (Code: {}, Status: {})",
+                    path, ex.getMessage(), ex.getCode(), status.value(), ex);
         }
 
         return ResponseEntity.status(status)
@@ -171,13 +176,5 @@ public abstract class BaseExceptionHandler {
             return description.substring(4);
         }
         return description;
-    }
-
-    protected HttpStatus determineHttpStatus(String errorCode) {
-        return switch (errorCode) {
-            case "INVALID_INPUT", "INVALID_CREDENTIALS", "Bad Request" -> HttpStatus.BAD_REQUEST;
-            case "UNAUTHORIZED" -> HttpStatus.UNAUTHORIZED;
-            default -> HttpStatus.INTERNAL_SERVER_ERROR;
-        };
     }
 }
