@@ -66,6 +66,7 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
         }
 
         // 3. 헤더 추출
+        String userNoHeader = request.getHeader("X-User-No");
         String serviceId = request.getHeader("X-Service-Id");
         String role = request.getHeader("X-Role");
         String authHeader = request.getHeader("X-Auth");
@@ -75,7 +76,10 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
         String deviceCd = request.getHeader("X-Device-Cd");
         String deviceStr = request.getHeader("X-Device-Str");
 
-        // 4. 암호화된 userId 복호화
+        // 4. userNo 파싱 (평문)
+        Long userNo = parseUserNo(userNoHeader);
+
+        // 5. 암호화된 userId 복호화
         String decryptedUserId;
         try {
             decryptedUserId = cryptoUtil.decrypt(encryptedUserId);
@@ -85,10 +89,10 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
             return false;
         }
 
-        // 5. 권한 파싱 (JSON 배열)
+        // 6. 권한 파싱 (JSON 배열)
         List<String> auth = parseAuthHeader(authHeader);
 
-        // 6. MDC 설정 (로깅용)
+        // 7. MDC 설정 (로깅용)
         if (serviceId != null && !serviceId.isBlank()) {
             MDC.put("serviceId", serviceId);
         }
@@ -96,8 +100,9 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
             MDC.put("nickName", nickName);
         }
 
-        // 7. GatewayContext 설정
+        // 8. GatewayContext 설정
         GatewayContext context = GatewayContext.builder()
+                .userNo(userNo)
                 .userId(decryptedUserId)
                 .serviceId(serviceId)
                 .role(role)
@@ -112,7 +117,8 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
         GatewayContext.setContext(context);
 
         if (log.isDebugEnabled()) {
-            log.debug("Gateway context initialized - Service: {}, Role: {}", serviceId, role);
+            log.debug("Gateway context initialized - UserNo: {}, Service: {}, Role: {}",
+                    userNo, serviceId, role);
         }
 
         return true;
@@ -124,6 +130,19 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
         MDC.remove("serviceId");
         MDC.remove("nickName");
         GatewayContext.clear();
+    }
+
+    private Long parseUserNo(String userNoHeader) {
+        if (userNoHeader == null || userNoHeader.isBlank()) {
+            return null;
+        }
+
+        try {
+            return Long.parseLong(userNoHeader);
+        } catch (NumberFormatException e) {
+            log.warn("Failed to parse userNo header: {}", userNoHeader);
+            return null;
+        }
     }
 
     private List<String> parseAuthHeader(String authHeader) {

@@ -29,6 +29,12 @@ import java.util.List;
 @AllArgsConstructor
 public class GatewayContext {
     /**
+     * 사용자 번호 (시스템 내부 식별자)
+     * 평문 전달 - 민감정보 아님
+     */
+    private Long userNo;
+
+    /**
      * 사용자 ID (복호화된 평문)
      * 보안: 로그 출력 시 마스킹 필수
      */
@@ -126,6 +132,16 @@ public class GatewayContext {
      */
     public static boolean hasContext() {
         return contextHolder.get() != null;
+    }
+
+    /**
+     * 현재 사용자 번호 가져오기 (편의 메서드)
+     *
+     * @return 사용자 번호 (없으면 null)
+     */
+    public static Long getCurrentUserNo() {
+        GatewayContext context = getCurrent();
+        return context != null ? context.getUserNo() : null;
     }
 
     /**
