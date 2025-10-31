@@ -86,7 +86,8 @@ import jakarta.annotation.PostConstruct;
         "org.softwiz.platform.iot.common.lib.service",
         "org.softwiz.platform.iot.common.lib.util",
         "org.softwiz.platform.iot.common.lib.validator",
-        "org.softwiz.platform.iot.common.lib.exception"
+        "org.softwiz.platform.iot.common.lib.exception",
+        "org.softwiz.platform.iot.common.lib.mybatis"
 })
 @EnableConfigurationProperties
 public class CommonLibAutoConfiguration {
