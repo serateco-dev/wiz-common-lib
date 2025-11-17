@@ -20,6 +20,7 @@ import java.util.List;
  *
  * 보안 주의사항:
  * - userId는 복호화된 평문 (예: user@example.com)
+ * - accessToken은 JWT 토큰 (마이크로서비스 간 전파용)
  * - 로그에 출력 시 마스킹 필수
  * - 외부 API 응답에 포함 금지
  */
@@ -81,6 +82,21 @@ public class GatewayContext {
      * 디바이스 상세 정보
      */
     private String deviceStr;
+
+    /**
+     * JWT Access Token (마이크로서비스 간 전파용)
+     *
+     * 용도:
+     * - 마이크로서비스 간 내부 호출 시 Authorization 헤더 전달
+     * - Gateway 검증을 통과한 유효한 토큰만 저장됨
+     *
+     * 보안:
+     * - ThreadLocal로 요청별 격리
+     * - 요청 종료 시 자동 삭제 (clear() 호출)
+     * - 로그 출력 시 절대 전체 토큰 노출 금지
+     * - DB나 외부 저장소에 저장 금지
+     */
+    private String accessToken;
 
     /**
      * ThreadLocal 컨텍스트 홀더
@@ -197,6 +213,33 @@ public class GatewayContext {
     }
 
     /**
+     * 현재 Access Token 가져오기 (편의 메서드)
+     *
+     * 용도: 마이크로서비스 간 내부 호출 시 Authorization 헤더 전달
+     *
+     * 보안 주의:
+     * - 반환된 토큰을 로그에 출력하지 말 것
+     * - DB나 캐시에 저장하지 말 것
+     * - HTTP 헤더로만 전달할 것
+     *
+     * @return Access Token (없으면 null)
+     */
+    public static String getCurrentAccessToken() {
+        GatewayContext context = getCurrent();
+        return context != null ? context.getAccessToken() : null;
+    }
+
+    /**
+     * Access Token 존재 여부 확인 (편의 메서드)
+     *
+     * @return Access Token이 있으면 true
+     */
+    public static boolean hasAccessToken() {
+        String token = getCurrentAccessToken();
+        return token != null && !token.isEmpty();
+    }
+
+    /**
      * 특정 권한 보유 여부 확인 (인스턴스 메서드)
      *
      * @param target 확인할 권한
@@ -263,5 +306,35 @@ public class GatewayContext {
     public static boolean currentHasAllAuth(String... targets) {
         GatewayContext context = getCurrent();
         return context != null && context.hasAllAuth(targets);
+    }
+
+    /**
+     * toString 오버라이드 - 보안을 위해 accessToken은 마스킹 처리
+     */
+    @Override
+    public String toString() {
+        return "GatewayContext{" +
+                "userNo=" + userNo +
+                ", userId='" + maskUserId(userId) + '\'' +
+                ", serviceId='" + serviceId + '\'' +
+                ", role='" + role + '\'' +
+                ", auth=" + auth +
+                ", provider='" + provider + '\'' +
+                ", nickName='" + nickName + '\'' +
+                ", clientIp='" + clientIp + '\'' +
+                ", deviceCd='" + deviceCd + '\'' +
+                ", deviceStr='" + deviceStr + '\'' +
+                ", hasAccessToken=" + (accessToken != null && !accessToken.isEmpty()) +
+                '}';
+    }
+
+    /**
+     * userId 마스킹 처리 (로그 출력용)
+     */
+    private String maskUserId(String userId) {
+        if (userId == null || userId.length() <= 3) {
+            return "***";
+        }
+        return userId.substring(0, 3) + "***";
     }
 }
