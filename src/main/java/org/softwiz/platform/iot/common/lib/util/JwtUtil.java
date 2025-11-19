@@ -38,13 +38,13 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String jwtSecret;
 
-    @Value("${jwt.expiration}")
+    @Value("${jwt.expiration:3600000}")  // 기본값: 1시간
     private long expiration;
 
-    @Value("${jwt.refresh-expiration}")
+    @Value("${jwt.refresh-expiration:86400000}")  // 기본값: 24시간
     private long refreshExpiration;
 
-    @Value("${jwt.issuer}")
+    @Value("${jwt.issuer:iot-platform}")  // 기본값: iot-platform
     private String issuer;
 
     private SecretKey getSecretKey() {
