@@ -3,6 +3,7 @@ package org.softwiz.platform.iot.common.lib.validator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -16,11 +17,16 @@ import java.util.Base64;
  * Gateway에서 전송한 서명을 검증하여 직접 호출을 방지합니다.
  * Mock 환경에서는 특정 Mock 시그니처를 허용합니다.
  *
- * 보안: signatureSecret은 반드시 환경변수 또는 application-{profile}.yml에서 설정해야 합니다.
- * 기본값이 없으므로 운영 환경에서 설정하지 않으면 애플리케이션 시작 시 에러가 발생합니다.
+ * gateway.signature.enabled=false인 경우 이 Bean은 생성되지 않습니다.
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(
+        prefix = "gateway.signature",
+        name = "enabled",
+        havingValue = "true",
+        matchIfMissing = false  // enabled가 없거나 false면 Bean 생성 안함
+)
 public class GatewaySignatureValidator {
 
     @Value("${gateway.signature.secret}")
@@ -29,8 +35,8 @@ public class GatewaySignatureValidator {
     @Value("${gateway.signature.mock-enabled:false}")
     private boolean mockEnabled;
 
-    @Value("${gateway.signature.enabled:true}")
-    private boolean signatureEnabled;
+    @Value("${gateway.signature.timeout:300}")
+    private long signatureTimeoutSeconds;
 
     private static final String MOCK_SIGNATURE = "MOCK_GATEWAY_SIGNATURE_FOR_TESTING";
 
@@ -41,12 +47,6 @@ public class GatewaySignatureValidator {
      * @return 서명이 유효하면 true, 그렇지 않으면 false
      */
     public boolean validateSignature(HttpServletRequest request) {
-        // 서명 검증이 비활성화된 경우 (개발 편의용)
-        if (!signatureEnabled) {
-            log.warn("Gateway signature validation is DISABLED");
-            return true;
-        }
-
         String signature = request.getHeader("X-Gateway-Signature");
         String timestamp = request.getHeader("X-Gateway-Timestamp");
 
@@ -67,14 +67,15 @@ public class GatewaySignatureValidator {
             return false;
         }
 
-        // 3. 타임스탬프 유효성 확인 (5분 이내)
+        // 3. 타임스탬프 유효성 확인
         try {
             long requestTime = Long.parseLong(timestamp);
             long currentTime = System.currentTimeMillis();
             long timeDiff = Math.abs(currentTime - requestTime);
+            long maxDiff = signatureTimeoutSeconds * 1000;
 
-            if (timeDiff > 300000) { // 5분 = 300,000ms
-                log.warn("Timestamp expired - Diff: {}ms", timeDiff);
+            if (timeDiff > maxDiff) {
+                log.warn("Timestamp expired - Diff: {}ms, Max: {}ms", timeDiff, maxDiff);
                 return false;
             }
         } catch (NumberFormatException e) {
@@ -103,7 +104,7 @@ public class GatewaySignatureValidator {
 
                 String gatewayUri = request.getHeader("X-Gateway-Request-URI");
                 if (gatewayUri != null && !gatewayUri.equals(fullUri)) {
-                    log.debug("URI mismatch - Gateway: '{}', SSO: '{}'", gatewayUri, fullUri);
+                    log.debug("URI mismatch - Gateway: '{}', Service: '{}'", gatewayUri, fullUri);
                 }
             }
         }
