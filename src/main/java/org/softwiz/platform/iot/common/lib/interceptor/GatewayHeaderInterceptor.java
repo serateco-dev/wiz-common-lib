@@ -35,14 +35,19 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
 
-        // Gateway 서명 검증
-        if (signatureEnabled && !signatureValidator.validateSignature(request)) {
-            log.warn("Gateway signature validation failed: {} {}", request.getMethod(), request.getRequestURI());
-            sendUnauthorizedResponse(response, "Invalid gateway signature");
-            return false;
-        }
-
         String encryptedUserId = request.getHeader("X-User-Id");
+
+        if (encryptedUserId == null || encryptedUserId.isBlank()) {
+            // 익명 요청: 서명 검증 필수
+            if (signatureEnabled && !signatureValidator.validateSignature(request)) {
+                log.warn("Gateway signature validation failed: {} {}", request.getMethod(), request.getRequestURI());
+                sendUnauthorizedResponse(response, "Invalid gateway signature");
+                return false;
+            }
+
+            // 익명 요청은 통과 (Kafka 로그 수집용)
+            return true;
+        }
 
         if (encryptedUserId != null && !encryptedUserId.isBlank()) {
             // 기존 헤더 추출
