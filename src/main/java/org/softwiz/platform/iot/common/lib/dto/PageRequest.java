@@ -17,7 +17,7 @@ public class PageRequest {
     @Builder.Default
     private Integer pageSize = 20;
     
-    private Long offset;
+    private Integer offset;
     
     public void init() {
         if (this.page == null || this.page < 1) {

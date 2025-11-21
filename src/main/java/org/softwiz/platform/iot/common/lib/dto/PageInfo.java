@@ -14,7 +14,7 @@ public class PageInfo {
     // 기본 페이징 정보
     private Integer currentPage;
     private Integer pageSize;
-    private Long totalCount;
+    private Integer totalCount;
     private Integer totalPages;
     
     // 네비게이션 플래그
