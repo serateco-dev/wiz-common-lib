@@ -18,6 +18,7 @@ import java.util.Base64;
  * Mock 환경에서는 특정 Mock 시그니처를 허용합니다.
  *
  * gateway.signature.enabled=false인 경우 이 Bean은 생성되지 않습니다.
+ * gateway.signature.mock-enabled=true인 경우 Mock 시그니처를 허용합니다.
  */
 @Slf4j
 @Component
@@ -29,7 +30,7 @@ import java.util.Base64;
 )
 public class GatewaySignatureValidator {
 
-    @Value("${gateway.signature.secret}")
+    @Value("${gateway.signature.secret:dummy-secret}")  // ← Mock 모드용 기본값
     private String signatureSecret;
 
     @Value("${gateway.signature.mock-enabled:false}")
@@ -52,7 +53,7 @@ public class GatewaySignatureValidator {
 
         // 1. Mock 시그니처 체크 (로컬 테스트용)
         if (mockEnabled && MOCK_SIGNATURE.equals(signature)) {
-            log.debug("Mock signature accepted (mock-enabled=true)");
+            log.debug("✅ Mock signature accepted (mock-enabled=true)");
             return true;
         }
 
@@ -141,6 +142,15 @@ public class GatewaySignatureValidator {
     }
 
     /**
+     * Mock 시그니처 반환
+     *
+     * @return Mock 시그니처 상수
+     */
+    public String getMockSignature() {
+        return MOCK_SIGNATURE;
+    }
+
+    /**
      * Mock 시그니처 생성 (DevController에서 사용)
      *
      * @param method HTTP 메서드
@@ -163,5 +173,14 @@ public class GatewaySignatureValidator {
      */
     public String generateMockTimestamp() {
         return String.valueOf(System.currentTimeMillis());
+    }
+
+    /**
+     * Mock 모드 활성화 여부
+     *
+     * @return Mock 모드 여부
+     */
+    public boolean isMockEnabled() {
+        return mockEnabled;
     }
 }
