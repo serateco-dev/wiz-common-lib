@@ -28,27 +28,27 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
     private final GatewaySignatureValidator signatureValidator;
     private final ObjectMapper objectMapper;
 
-    // signatureEnabled 필드 제거 - Validator 내부에서 처리함
-
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
 
+        // ★★★ 1. 서명 검증 (enabled=false면 Validator 내부에서 true 반환) ★★★
+        if (!signatureValidator.validateSignature(request)) {
+            log.warn("Gateway signature validation failed: {} {}", request.getMethod(), request.getRequestURI());
+            sendUnauthorizedResponse(response, "Invalid gateway signature");
+            return false;
+        }
+
+        // ★★★ 2. 사용자 헤더가 있으면 GatewayContext 설정 ★★★
         String encryptedUserId = request.getHeader("X-User-Id");
 
         if (encryptedUserId == null || encryptedUserId.isBlank()) {
-            // 익명 요청: 서명 검증 (Validator 내부에서 enabled 체크함)
-            if (!signatureValidator.validateSignature(request)) {
-                log.warn("Gateway signature validation failed: {} {}", request.getMethod(), request.getRequestURI());
-                sendUnauthorizedResponse(response, "Invalid gateway signature");
-                return false;
-            }
-
-            // 익명 요청은 통과 (Kafka 로그 수집용)
+            // 익명 요청: 빈 GatewayContext 설정 (null 대신 빈 객체로 접근 가능)
+            GatewayContext.setContext(GatewayContext.builder().build());
+            log.debug("Anonymous request passed with empty context: {} {}", request.getMethod(), request.getRequestURI());
             return true;
         }
 
-        // 인증된 요청 처리
-        // 기존 헤더 추출
+        // ★★★ 3. 인증된 요청: GatewayContext 설정 ★★★
         String userNoHeader = request.getHeader("X-User-No");
         String serviceId = request.getHeader("X-Service-Id");
         String role = request.getHeader("X-Role");
@@ -89,7 +89,7 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
             MDC.put("nickName", nickName);
         }
 
-        // GatewayContext에 accessToken 포함
+        // GatewayContext 설정
         GatewayContext context = GatewayContext.builder()
                 .userNo(userNo)
                 .userId(decryptedUserId)
