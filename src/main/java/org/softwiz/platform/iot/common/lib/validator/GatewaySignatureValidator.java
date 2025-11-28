@@ -3,7 +3,6 @@ package org.softwiz.platform.iot.common.lib.validator;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -17,24 +16,21 @@ import java.util.Base64;
  * Gateway에서 전송한 서명을 검증하여 직접 호출을 방지합니다.
  * Mock 환경에서는 특정 Mock 시그니처를 허용합니다.
  *
- * gateway.signature.enabled=false인 경우 이 Bean은 생성되지 않습니다.
- * gateway.signature.mock-enabled=true인 경우 Mock 시그니처를 허용합니다.
+ * gateway.signature.enabled=false로 설정하면 검증을 완전히 비활성화합니다.
+ * gateway.signature.mock-enabled=true로 설정하면 Mock 시그니처를 허용합니다.
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(
-        prefix = "gateway.signature",
-        name = "enabled",
-        havingValue = "true",
-        matchIfMissing = false  // enabled가 없거나 false면 Bean 생성 안함
-)
 public class GatewaySignatureValidator {
 
-    @Value("${gateway.signature.secret:dummy-secret}")  // ← Mock 모드용 기본값
+    @Value("${gateway.signature.secret:dummy-secret-for-disabled-mode}")
     private String signatureSecret;
 
     @Value("${gateway.signature.mock-enabled:false}")
     private boolean mockEnabled;
+
+    @Value("${gateway.signature.enabled:true}")
+    private boolean signatureEnabled;
 
     @Value("${gateway.signature.timeout:300}")
     private long signatureTimeoutSeconds;
@@ -48,6 +44,12 @@ public class GatewaySignatureValidator {
      * @return 서명이 유효하면 true, 그렇지 않으면 false
      */
     public boolean validateSignature(HttpServletRequest request) {
+        // ★★★ 서명 검증이 비활성화된 경우 (개발 편의용) ★★★
+        if (!signatureEnabled) {
+            log.debug("Gateway signature validation is DISABLED");
+            return true;
+        }
+
         String signature = request.getHeader("X-Gateway-Signature");
         String timestamp = request.getHeader("X-Gateway-Timestamp");
 
@@ -182,5 +184,14 @@ public class GatewaySignatureValidator {
      */
     public boolean isMockEnabled() {
         return mockEnabled;
+    }
+
+    /**
+     * 서명 검증 활성화 여부
+     *
+     * @return 서명 검증 활성화 여부
+     */
+    public boolean isSignatureEnabled() {
+        return signatureEnabled;
     }
 }

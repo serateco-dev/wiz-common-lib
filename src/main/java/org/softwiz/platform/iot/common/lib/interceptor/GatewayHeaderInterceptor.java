@@ -12,7 +12,6 @@ import org.softwiz.platform.iot.common.lib.context.GatewayContext;
 import org.softwiz.platform.iot.common.lib.dto.ErrorResponse;
 import org.softwiz.platform.iot.common.lib.util.CryptoUtil;
 import org.softwiz.platform.iot.common.lib.validator.GatewaySignatureValidator;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -29,8 +28,7 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
     private final GatewaySignatureValidator signatureValidator;
     private final ObjectMapper objectMapper;
 
-    @Value("${gateway.signature.enabled:true}")
-    private boolean signatureEnabled;
+    // signatureEnabled 필드 제거 - Validator 내부에서 처리함
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
@@ -38,8 +36,8 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
         String encryptedUserId = request.getHeader("X-User-Id");
 
         if (encryptedUserId == null || encryptedUserId.isBlank()) {
-            // 익명 요청: 서명 검증 필수
-            if (signatureEnabled && !signatureValidator.validateSignature(request)) {
+            // 익명 요청: 서명 검증 (Validator 내부에서 enabled 체크함)
+            if (!signatureValidator.validateSignature(request)) {
                 log.warn("Gateway signature validation failed: {} {}", request.getMethod(), request.getRequestURI());
                 sendUnauthorizedResponse(response, "Invalid gateway signature");
                 return false;
@@ -49,77 +47,71 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
             return true;
         }
 
-        if (encryptedUserId != null && !encryptedUserId.isBlank()) {
-            // 기존 헤더 추출
-            String userNoHeader = request.getHeader("X-User-No");
-            String serviceId = request.getHeader("X-Service-Id");
-            String role = request.getHeader("X-Role");
-            String authHeader = request.getHeader("X-Auth");
-            String provider = request.getHeader("X-Provider");
-            String nickName = request.getHeader("X-Nick-Name");
-            String clientIp = request.getHeader("X-Client-Ip");
-            String deviceCd = request.getHeader("X-Device-Cd");
-            String deviceStr = request.getHeader("X-Device-Str");
+        // 인증된 요청 처리
+        // 기존 헤더 추출
+        String userNoHeader = request.getHeader("X-User-No");
+        String serviceId = request.getHeader("X-Service-Id");
+        String role = request.getHeader("X-Role");
+        String authHeader = request.getHeader("X-Auth");
+        String provider = request.getHeader("X-Provider");
+        String nickName = request.getHeader("X-Nick-Name");
+        String clientIp = request.getHeader("X-Client-Ip");
+        String deviceCd = request.getHeader("X-Device-Cd");
+        String deviceStr = request.getHeader("X-Device-Str");
 
-            // ✅ Authorization 헤더 추출
-            String authorizationHeader = request.getHeader("Authorization");
-            String accessToken = null;
-            if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
-                accessToken = authorizationHeader.substring(7);
-                log.debug("🎫 AccessToken extracted from Authorization header");
-            }
+        // Authorization 헤더 추출
+        String authorizationHeader = request.getHeader("Authorization");
+        String accessToken = null;
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            accessToken = authorizationHeader.substring(7);
+            log.debug("🎫 AccessToken extracted from Authorization header");
+        }
 
-            Long userNo = parseUserNo(userNoHeader);
+        Long userNo = parseUserNo(userNoHeader);
 
-            // userId 복호화
-            String decryptedUserId;
-            try {
-                decryptedUserId = cryptoUtil.decrypt(encryptedUserId);
-            } catch (Exception e) {
-                log.error("Failed to decrypt userId: {}", e.getMessage());
-                sendUnauthorizedResponse(response, "인증실패");
-                return false;
-            }
-
-            List<String> auth = parseAuthHeader(authHeader);
-
-            // MDC 설정
-            if (serviceId != null && !serviceId.isBlank()) {
-                MDC.put("serviceId", serviceId);
-            }
-            if (nickName != null && !nickName.isBlank()) {
-                MDC.put("nickName", nickName);
-            }
-
-            // ✅ GatewayContext에 accessToken 포함
-            GatewayContext context = GatewayContext.builder()
-                    .userNo(userNo)
-                    .userId(decryptedUserId)
-                    .serviceId(serviceId)
-                    .role(role)
-                    .auth(auth)
-                    .provider(provider)
-                    .nickName(nickName)
-                    .clientIp(clientIp)
-                    .deviceCd(deviceCd)
-                    .deviceStr(deviceStr)
-                    .accessToken(accessToken)  // ✅ 추가
-                    .build();
-
-            GatewayContext.setContext(context);
-
-            if (log.isDebugEnabled()) {
-                log.debug("Gateway context initialized - UserNo: {}, Service: {}, Role: {}, HasToken: {}",
-                        userNo, serviceId, role, accessToken != null);
-            }
-
-            return true;
-
-        } else {
-            log.warn("Missing X-User-Id header: {} {}", request.getMethod(), request.getRequestURI());
+        // userId 복호화
+        String decryptedUserId;
+        try {
+            decryptedUserId = cryptoUtil.decrypt(encryptedUserId);
+        } catch (Exception e) {
+            log.error("Failed to decrypt userId: {}", e.getMessage());
             sendUnauthorizedResponse(response, "인증실패");
             return false;
         }
+
+        List<String> auth = parseAuthHeader(authHeader);
+
+        // MDC 설정
+        if (serviceId != null && !serviceId.isBlank()) {
+            MDC.put("serviceId", serviceId);
+        }
+        if (nickName != null && !nickName.isBlank()) {
+            MDC.put("nickName", nickName);
+        }
+
+        // GatewayContext에 accessToken 포함
+        GatewayContext context = GatewayContext.builder()
+                .userNo(userNo)
+                .userId(decryptedUserId)
+                .serviceId(serviceId)
+                .role(role)
+                .auth(auth)
+                .provider(provider)
+                .nickName(nickName)
+                .clientIp(clientIp)
+                .deviceCd(deviceCd)
+                .deviceStr(deviceStr)
+                .accessToken(accessToken)
+                .build();
+
+        GatewayContext.setContext(context);
+
+        if (log.isDebugEnabled()) {
+            log.debug("Gateway context initialized - UserNo: {}, Service: {}, Role: {}, HasToken: {}",
+                    userNo, serviceId, role, accessToken != null);
+        }
+
+        return true;
     }
 
     @Override
