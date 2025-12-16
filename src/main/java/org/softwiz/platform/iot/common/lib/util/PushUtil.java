@@ -9,14 +9,13 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * 푸시 알림 요청 유틸리티
- * 
+ *
  * <p>다른 서비스에서 WizMessage 푸시 서비스로 요청을 보낼 때 사용합니다.</p>
- * 
+ *
  * <pre>
  * 사용 예시:
  * {@code
@@ -27,19 +26,19 @@ import java.util.Map;
  *     .title("새 알림")
  *     .content("새로운 알림이 있습니다.")
  *     .build();
- * 
+ *
  * // 2. 상세한 푸시 요청 생성
  * PushRequest request = PushUtil.builder()
  *     .serviceId("NEST")
  *     .userNo(1001L)
- *     .title("⚠️ 경고")
+ *     .title("경고")
  *     .content("긴급 상황이 발생했습니다.")
  *     .warnDiv(PushUtil.WarnDiv.WARNING)
  *     .pushValue("EMERGENCY_ALERT")
  *     .linkUrl("https://app.example.com/alert/123")
  *     .imageUrl("https://cdn.example.com/warning.png")
  *     .build();
- * 
+ *
  * // 3. 예약 발송
  * PushRequest request = PushUtil.builder()
  *     .serviceId("NEST")
@@ -47,7 +46,7 @@ import java.util.Map;
  *     .content("예약된 알림입니다.")
  *     .scheduledAt(LocalDateTime.now().plusHours(1))
  *     .build();
- * 
+ *
  * // 4. 추가 데이터 포함
  * PushRequest request = PushUtil.builder()
  *     .serviceId("NEST")
@@ -56,7 +55,7 @@ import java.util.Map;
  *     .dataField("orderId", 12345)
  *     .dataField("orderStatus", "COMPLETED")
  *     .build();
- * 
+ *
  * // 5. 마케팅 푸시 (동의 확인 필요)
  * PushRequest request = PushUtil.builder()
  *     .serviceId("NEST")
@@ -64,7 +63,7 @@ import java.util.Map;
  *     .content("특별 할인 이벤트!")
  *     .marketingConsent()  // consentType = "MARKETING_PUSH"
  *     .build();
- * 
+ *
  * // 6. 시스템 알림 (동의 확인 스킵)
  * PushRequest request = PushUtil.builder()
  *     .serviceId("NEST")
@@ -72,10 +71,41 @@ import java.util.Map;
  *     .content("시스템 점검 안내")
  *     .skipConsentCheck()
  *     .build();
- * 
- * // 7. RestTemplate으로 발송
+ *
+ * // 7. 템플릿 기반 발송 (개인)
+ * TemplatePushRequest request = PushUtil.templateBuilder()
+ *     .serviceId("NEST")
+ *     .templateCode("ORDER_COMPLETE")
+ *     .userNo(1001L)
+ *     .variable("orderNo", "12345")
+ *     .variable("deliveryDate", "2025-12-20")
+ *     .build();
+ *
+ * // 8. 템플릿 기반 발송 (다중)
+ * TemplatePushRequest request = PushUtil.templateBuilder()
+ *     .serviceId("NEST")
+ *     .templateCode("MARKETING_EVENT")
+ *     .userNos(1001L, 1002L, 1003L)
+ *     .variable("eventName", "연말 할인")
+ *     .variable("eventContent", "최대 50% 할인!")
+ *     .build();
+ *
+ * // 9. 템플릿 기반 발송 (전체)
+ * TemplatePushRequest request = PushUtil.templateBuilder()
+ *     .serviceId("NEST")
+ *     .templateCode("SYSTEM_NOTICE")
+ *     .sendAll()
+ *     .variable("noticeTitle", "서버 점검")
+ *     .skipConsentCheck()
+ *     .build();
+ *
+ * // 10. RestTemplate으로 발송
  * String pushServiceUrl = "http://wizmessage:8095/api/v2/push/send";
  * ApiResponse response = restTemplate.postForObject(pushServiceUrl, request, ApiResponse.class);
+ *
+ * // 11. 템플릿 발송
+ * String templatePushUrl = "http://wizmessage:8095/api/v2/push/template/send";
+ * ApiResponse response = restTemplate.postForObject(templatePushUrl, request, ApiResponse.class);
  * }
  * </pre>
  */
@@ -86,7 +116,7 @@ public class PushUtil {
         // Utility class
     }
 
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = 
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
     // ========================================
@@ -193,6 +223,76 @@ public class PushUtil {
     }
 
     /**
+     * 템플릿 푸시 발송 요청 DTO
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class TemplatePushRequest {
+        /**
+         * 서비스 ID (필수)
+         */
+        private String serviceId;
+
+        /**
+         * 템플릿 코드 (필수)
+         */
+        private String templateCode;
+
+        /**
+         * 수신자 사용자 번호 (개인 발송)
+         */
+        private Long userNo;
+
+        /**
+         * 수신자 사용자 번호 목록 (다중 발송)
+         */
+        private List<Long> userNos;
+
+        /**
+         * 전체 발송 여부
+         */
+        private Boolean sendAll;
+
+        /**
+         * 템플릿 변수
+         */
+        private Map<String, String> variables;
+
+        /**
+         * 추가 데이터 (JSON 문자열)
+         */
+        private String data;
+
+        /**
+         * 연결 링크 URL
+         */
+        private String linkUrl;
+
+        /**
+         * 이미지 URL
+         */
+        private String imageUrl;
+
+        /**
+         * 예약 발송 시간 (ISO 8601)
+         */
+        private String eventTime;
+
+        /**
+         * 동의 확인 스킵 여부
+         */
+        private Boolean skipConsentCheck;
+
+        /**
+         * 대상 디바이스 ID
+         */
+        private String deviceId;
+    }
+
+    /**
      * 푸시 토큰 저장 요청 DTO
      */
     @Data
@@ -221,6 +321,13 @@ public class PushUtil {
      */
     public static PushRequestBuilder builder() {
         return new PushRequestBuilder();
+    }
+
+    /**
+     * 템플릿 푸시 요청 빌더 생성
+     */
+    public static TemplatePushRequestBuilder templateBuilder() {
+        return new TemplatePushRequestBuilder();
     }
 
     /**
@@ -439,6 +546,165 @@ public class PushUtil {
     }
 
     // ========================================
+    // 템플릿 푸시 요청 빌더
+    // ========================================
+
+    /**
+     * 템플릿 푸시 요청 빌더
+     */
+    public static class TemplatePushRequestBuilder {
+        private String serviceId;
+        private String templateCode;
+        private Long userNo;
+        private List<Long> userNos;
+        private Boolean sendAll = false;
+        private final Map<String, String> variables = new HashMap<>();
+        private String linkUrl;
+        private String imageUrl;
+        private LocalDateTime scheduledAt;
+        private Boolean skipConsentCheck = false;
+        private String deviceId;
+        private final Map<String, Object> dataMap = new HashMap<>();
+
+        public TemplatePushRequestBuilder serviceId(String serviceId) {
+            this.serviceId = serviceId;
+            return this;
+        }
+
+        public TemplatePushRequestBuilder templateCode(String templateCode) {
+            this.templateCode = templateCode;
+            return this;
+        }
+
+        /**
+         * 개인 발송 대상 설정
+         */
+        public TemplatePushRequestBuilder userNo(Long userNo) {
+            this.userNo = userNo;
+            return this;
+        }
+
+        /**
+         * 다중 발송 대상 설정
+         */
+        public TemplatePushRequestBuilder userNos(List<Long> userNos) {
+            this.userNos = userNos;
+            return this;
+        }
+
+        /**
+         * 다중 발송 대상 설정 (가변인자)
+         */
+        public TemplatePushRequestBuilder userNos(Long... userNos) {
+            this.userNos = Arrays.asList(userNos);
+            return this;
+        }
+
+        /**
+         * 전체 발송 설정
+         */
+        public TemplatePushRequestBuilder sendAll() {
+            this.sendAll = true;
+            return this;
+        }
+
+        /**
+         * 템플릿 변수 추가
+         */
+        public TemplatePushRequestBuilder variable(String key, String value) {
+            this.variables.put(key, value);
+            return this;
+        }
+
+        /**
+         * 템플릿 변수 추가 (숫자)
+         */
+        public TemplatePushRequestBuilder variable(String key, Number value) {
+            this.variables.put(key, value != null ? value.toString() : "");
+            return this;
+        }
+
+        /**
+         * 템플릿 변수 일괄 추가
+         */
+        public TemplatePushRequestBuilder variables(Map<String, String> variables) {
+            this.variables.putAll(variables);
+            return this;
+        }
+
+        public TemplatePushRequestBuilder linkUrl(String linkUrl) {
+            this.linkUrl = linkUrl;
+            return this;
+        }
+
+        public TemplatePushRequestBuilder imageUrl(String imageUrl) {
+            this.imageUrl = imageUrl;
+            return this;
+        }
+
+        /**
+         * 예약 발송 시간 설정
+         */
+        public TemplatePushRequestBuilder scheduledAt(LocalDateTime scheduledAt) {
+            this.scheduledAt = scheduledAt;
+            return this;
+        }
+
+        /**
+         * 동의 확인 스킵 (시스템 알림용)
+         */
+        public TemplatePushRequestBuilder skipConsentCheck() {
+            this.skipConsentCheck = true;
+            return this;
+        }
+
+        /**
+         * 대상 디바이스 설정
+         */
+        public TemplatePushRequestBuilder deviceId(String deviceId) {
+            this.deviceId = deviceId;
+            return this;
+        }
+
+        /**
+         * 추가 데이터 필드 추가
+         */
+        public TemplatePushRequestBuilder dataField(String key, Object value) {
+            this.dataMap.put(key, value);
+            return this;
+        }
+
+        public TemplatePushRequest build() {
+            // 데이터 맵을 JSON 문자열로 변환
+            String dataJson = null;
+            if (!dataMap.isEmpty()) {
+                dataJson = JsonUtil.toJson(dataMap);
+            }
+
+            // 예약 시간 포맷팅
+            String eventTime = null;
+            if (scheduledAt != null) {
+                eventTime = scheduledAt.format(DATE_TIME_FORMATTER);
+            }
+
+            return TemplatePushRequest.builder()
+                    .serviceId(serviceId)
+                    .templateCode(templateCode)
+                    .userNo(userNo)
+                    .userNos(userNos)
+                    .sendAll(sendAll)
+                    .variables(variables.isEmpty() ? null : variables)
+                    .data(dataJson)
+                    .linkUrl(linkUrl)
+                    .imageUrl(imageUrl)
+                    .eventTime(eventTime)
+                    .skipConsentCheck(skipConsentCheck)
+                    .deviceId(deviceId)
+                    .build();
+        }
+    }
+
+    // ========================================
     // 토큰 요청 빌더
     // ========================================
 
@@ -532,7 +798,7 @@ public class PushUtil {
     }
 
     // ========================================
-    // 편의 메서드
+    // 편의 메서드 - 일반 푸시
     // ========================================
 
     /**
@@ -567,7 +833,7 @@ public class PushUtil {
         return builder()
                 .serviceId(serviceId)
                 .userNo(userNo)
-                .title("⚠️ 경고")
+                .title("경고")
                 .content(content)
                 .warnDiv(WarnDiv.WARNING)
                 .build();
@@ -580,7 +846,7 @@ public class PushUtil {
         return builder()
                 .serviceId(serviceId)
                 .userNo(userNo)
-                .title("🚨 위험")
+                .title("위험")
                 .content(content)
                 .warnDiv(WarnDiv.DANGER)
                 .build();
@@ -611,6 +877,54 @@ public class PushUtil {
                 .content(content)
                 .warnDiv(WarnDiv.INFO)
                 .marketingConsent()
+                .build();
+    }
+
+    // ========================================
+    // 편의 메서드 - 템플릿 푸시
+    // ========================================
+
+    /**
+     * 템플릿 기반 개인 발송
+     *
+     * @param serviceId 서비스 ID
+     * @param templateCode 템플릿 코드
+     * @param userNo 수신자 사용자 번호
+     * @param variables 템플릿 변수
+     */
+    public static TemplatePushRequest template(String serviceId, String templateCode,
+                                               Long userNo, Map<String, String> variables) {
+        return templateBuilder()
+                .serviceId(serviceId)
+                .templateCode(templateCode)
+                .userNo(userNo)
+                .variables(variables)
+                .build();
+    }
+
+    /**
+     * 템플릿 기반 다중 발송
+     */
+    public static TemplatePushRequest templateMultiple(String serviceId, String templateCode,
+                                                       List<Long> userNos, Map<String, String> variables) {
+        return templateBuilder()
+                .serviceId(serviceId)
+                .templateCode(templateCode)
+                .userNos(userNos)
+                .variables(variables)
+                .build();
+    }
+
+    /**
+     * 템플릿 기반 전체 발송
+     */
+    public static TemplatePushRequest templateAll(String serviceId, String templateCode,
+                                                  Map<String, String> variables) {
+        return templateBuilder()
+                .serviceId(serviceId)
+                .templateCode(templateCode)
+                .sendAll()
+                .variables(variables)
                 .build();
     }
 }
