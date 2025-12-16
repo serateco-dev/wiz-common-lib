@@ -16,6 +16,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Component
@@ -54,17 +56,20 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
         String role = request.getHeader("X-Role");
         String authHeader = request.getHeader("X-Auth");
         String provider = request.getHeader("X-Provider");
-        String nickName = request.getHeader("X-Nick-Name");
+        String nickNameHeader = request.getHeader("X-Nick-Name");
         String clientIp = request.getHeader("X-Client-Ip");
         String deviceCd = request.getHeader("X-Device-Cd");
         String deviceStr = request.getHeader("X-Device-Str");
+
+        // nickName URL 디코딩 (한글 헤더 수신용)
+        String nickName = decodeNickName(nickNameHeader);
 
         // Authorization 헤더 추출
         String authorizationHeader = request.getHeader("Authorization");
         String accessToken = null;
         if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
             accessToken = authorizationHeader.substring(7);
-            log.debug("🎫 AccessToken extracted from Authorization header");
+            log.debug("AccessToken extracted from Authorization header");
         }
 
         Long userNo = parseUserNo(userNoHeader);
@@ -119,6 +124,21 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
         MDC.remove("serviceId");
         MDC.remove("nickName");
         GatewayContext.clear();
+    }
+
+    /**
+     * 닉네임 URL 디코딩 (한글 헤더 수신용)
+     */
+    private String decodeNickName(String nickNameHeader) {
+        if (nickNameHeader == null || nickNameHeader.isBlank()) {
+            return null;
+        }
+        try {
+            return URLDecoder.decode(nickNameHeader, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            log.warn("Failed to decode nickName: {}", e.getMessage());
+            return nickNameHeader;
+        }
     }
 
     private Long parseUserNo(String userNoHeader) {
