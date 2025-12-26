@@ -5,7 +5,10 @@ import org.softwiz.platform.iot.common.lib.dto.ApiResponse;
 import org.springframework.http.*;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -14,10 +17,10 @@ import java.util.List;
  * 푸시 서비스 클라이언트
  *
  * <p>다른 마이크로서비스에서 WizMessage 푸시 서비스를 호출할 때 사용합니다.</p>
+ * <p>Gateway 헤더(X-Gateway-Signature, X-Gateway-Timestamp)를 자동으로 전달합니다.</p>
  *
- * <pre>
+ * <pre>{@code
  * 사용 예시 (Spring Bean으로 등록):
- * {@code
  * @Configuration
  * public class PushClientConfig {
  *     @Value("${microservice.message.url:http://wizmessage:8098}")
@@ -33,71 +36,7 @@ import java.util.List;
  *         return new PushClient(restTemplate, messageServiceUrl);
  *     }
  * }
- * }
- * </pre>
- *
- * <pre>
- * 사용 예시 (서비스에서 호출):
- * {@code
- * @Service
- * @RequiredArgsConstructor
- * public class NotificationService {
- *     private final PushClient pushClient;
- *
- *     // 일반 푸시
- *     public void notifyUser(Long userNo, String message) {
- *         PushUtil.PushRequest request = PushUtil.builder()
- *             .serviceId("NEST")
- *             .userNo(userNo)
- *             .content(message)
- *             .build();
- *
- *         PushClient.PushResult result = pushClient.send(request);
- *         if (result.isSuccess()) {
- *             log.info("푸시 발송 성공: {}", result.getPushId());
- *         }
- *     }
- *
- *     // 템플릿 푸시 (개인 발송)
- *     public void notifyOrderComplete(Long userNo, String orderNo) {
- *         PushUtil.TemplatePushRequest request = PushUtil.templateBuilder()
- *             .serviceId("NEST")
- *             .templateCode("ORDER_COMPLETE")
- *             .userNo(userNo)
- *             .variable("orderNo", orderNo)
- *             .build();
- *
- *         PushClient.TemplatePushResult result = pushClient.sendTemplate(request);
- *         if (result.isSuccess()) {
- *             log.info("템플릿 푸시 발송 성공 - pushId: {}, status: {}",
- *                     result.getPushId(), result.getStatus());
- *         }
- *     }
- *
- *     // 템플릿 푸시 (다중 발송)
- *     public void notifyMarketingEvent(List<Long> userNos, String eventName) {
- *         PushUtil.TemplatePushRequest request = PushUtil.templateBuilder()
- *             .serviceId("NEST")
- *             .templateCode("MARKETING_EVENT")
- *             .userNos(userNos)
- *             .variable("eventName", eventName)
- *             .build();
- *
- *         PushClient.TemplatePushResult result = pushClient.sendTemplate(request);
- *         if (result.isSuccess()) {
- *             log.info("다중 발송 완료 - 성공: {}, 실패: {}",
- *                     result.getSuccessCount(), result.getFailedCount());
- *
- *             // 개별 결과 확인
- *             for (PushClient.PushResultItem item : result.getResults()) {
- *                 log.info("userNo: {}, pushId: {}, status: {}",
- *                         item.getUserNo(), item.getPushId(), item.getStatus());
- *             }
- *         }
- *     }
- * }
- * }
- * </pre>
+ * }</pre>
  */
 @Slf4j
 public class PushClient {
@@ -156,7 +95,7 @@ public class PushClient {
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                ApiResponse<?> body = response.getBody();
+                ApiResponse body = response.getBody();
                 Object data = body.getData();
 
                 Long pushId = null;
@@ -165,8 +104,7 @@ public class PushClient {
                 if (data instanceof java.util.Map) {
                     @SuppressWarnings("unchecked")
                     java.util.Map<String, Object> dataMap = (java.util.Map<String, Object>) data;
-                    pushId = dataMap.get("pushId") != null ?
-                            ((Number) dataMap.get("pushId")).longValue() : null;
+                    pushId = dataMap.get("pushId") != null ? ((Number) dataMap.get("pushId")).longValue() : null;
                     status = (String) dataMap.get("status");
                 }
 
@@ -217,7 +155,7 @@ public class PushClient {
             );
 
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
-                ApiResponse<?> body = response.getBody();
+                ApiResponse body = response.getBody();
                 Object data = body.getData();
 
                 if (data instanceof java.util.Map) {
@@ -227,6 +165,7 @@ public class PushClient {
                     String templateCode = (String) dataMap.get("templateCode");
                     String resolvedTitle = (String) dataMap.get("resolvedTitle");
                     String resolvedContent = (String) dataMap.get("resolvedContent");
+
                     Integer totalCount = dataMap.get("totalCount") != null ?
                             ((Number) dataMap.get("totalCount")).intValue() : 0;
                     Integer successCount = dataMap.get("successCount") != null ?
@@ -251,12 +190,14 @@ public class PushClient {
                     return TemplatePushResult.success(
                             templateCode, resolvedTitle, resolvedContent,
                             totalCount, successCount, failedCount, skippedCount,
-                            pushId, status, results,
-                            body.getMessage()
+                            pushId, status, results, body.getMessage()
                     );
                 }
 
-                return TemplatePushResult.success(null, null, null, 0, 0, 0, 0, null, null, Collections.emptyList(), body.getMessage());
+                return TemplatePushResult.success(
+                        null, null, null, 0, 0, 0, 0,
+                        null, null, Collections.emptyList(), body.getMessage()
+                );
             }
 
             return TemplatePushResult.failure("Unexpected response: " + response.getStatusCode());
@@ -285,7 +226,7 @@ public class PushClient {
 
         for (Object item : resultsList) {
             if (item instanceof java.util.Map) {
-                java.util.Map<String, Object> itemMap = (java.util.Map<String, Object>) item;
+                java.util.Map<?, ?> itemMap = (java.util.Map<?, ?>) item;
 
                 Long pushId = itemMap.get("pushId") != null ?
                         ((Number) itemMap.get("pushId")).longValue() : null;
@@ -346,11 +287,39 @@ public class PushClient {
 
     /**
      * HTTP 헤더 생성
+     * 현재 요청의 Gateway 헤더를 자동으로 복사합니다.
      */
     private HttpHeaders createHeaders(String accessToken) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
+        // 현재 요청의 Gateway 헤더 복사
+        try {
+            ServletRequestAttributes attributes =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+
+            if (attributes != null) {
+                HttpServletRequest currentRequest = attributes.getRequest();
+
+                // X-Gateway-Signature 헤더 복사
+                String signature = currentRequest.getHeader("X-Gateway-Signature");
+                if (signature != null && !signature.isEmpty()) {
+                    headers.set("X-Gateway-Signature", signature);
+                    log.debug("Gateway Signature 헤더 복사: {}", signature);
+                }
+
+                // X-Gateway-Timestamp 헤더 복사
+                String timestamp = currentRequest.getHeader("X-Gateway-Timestamp");
+                if (timestamp != null && !timestamp.isEmpty()) {
+                    headers.set("X-Gateway-Timestamp", timestamp);
+                    log.debug("Gateway Timestamp 헤더 복사: {}", timestamp);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Gateway 헤더 복사 실패 (요청 컨텍스트 없음): {}", e.getMessage());
+        }
+
+        // AccessToken이 제공된 경우 Bearer 토큰 추가
         if (accessToken != null && !accessToken.isEmpty()) {
             headers.setBearerAuth(accessToken);
         }
@@ -388,25 +357,11 @@ public class PushClient {
             return new PushResult(false, null, null, null, errorMessage);
         }
 
-        public boolean isSuccess() {
-            return success;
-        }
-
-        public Long getPushId() {
-            return pushId;
-        }
-
-        public String getStatus() {
-            return status;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public String getErrorMessage() {
-            return errorMessage;
-        }
+        public boolean isSuccess() { return success; }
+        public Long getPushId() { return pushId; }
+        public String getStatus() { return status; }
+        public String getMessage() { return message; }
+        public String getErrorMessage() { return errorMessage; }
 
         @Override
         public String toString() {
@@ -438,25 +393,15 @@ public class PushClient {
             this.errorMessage = errorMessage;
         }
 
-        public Long getPushId() {
-            return pushId;
-        }
-
-        public Long getUserNo() {
-            return userNo;
-        }
-
-        public String getStatus() {
-            return status;
-        }
-
-        public String getErrorMessage() {
-            return errorMessage;
-        }
+        public Long getPushId() { return pushId; }
+        public Long getUserNo() { return userNo; }
+        public String getStatus() { return status; }
+        public String getErrorMessage() { return errorMessage; }
 
         @Override
         public String toString() {
-            return String.format("PushResultItem{pushId=%d, userNo=%d, status='%s'}", pushId, userNo, status);
+            return String.format("PushResultItem{pushId=%d, userNo=%d, status='%s'}",
+                    pushId, userNo, status);
         }
     }
 
@@ -482,11 +427,10 @@ public class PushClient {
         private final String message;
         private final String errorMessage;
 
-        private TemplatePushResult(boolean success, String templateCode,
-                                   String resolvedTitle, String resolvedContent,
-                                   int totalCount, int successCount, int failedCount, int skippedCount,
-                                   Long pushId, String status, List<PushResultItem> results,
-                                   String message, String errorMessage) {
+        private TemplatePushResult(boolean success, String templateCode, String resolvedTitle,
+                                   String resolvedContent, int totalCount, int successCount,
+                                   int failedCount, int skippedCount, Long pushId, String status,
+                                   List<PushResultItem> results, String message, String errorMessage) {
             this.success = success;
             this.templateCode = templateCode;
             this.resolvedTitle = resolvedTitle;
@@ -502,85 +446,41 @@ public class PushClient {
             this.errorMessage = errorMessage;
         }
 
-        public static TemplatePushResult success(String templateCode, String resolvedTitle, String resolvedContent,
-                                                 int totalCount, int successCount, int failedCount, int skippedCount,
-                                                 Long pushId, String status, List<PushResultItem> results,
-                                                 String message) {
+        public static TemplatePushResult success(String templateCode, String resolvedTitle,
+                                                 String resolvedContent, int totalCount,
+                                                 int successCount, int failedCount, int skippedCount,
+                                                 Long pushId, String status,
+                                                 List<PushResultItem> results, String message) {
             return new TemplatePushResult(true, templateCode, resolvedTitle, resolvedContent,
-                    totalCount, successCount, failedCount, skippedCount,
-                    pushId, status, results, message, null);
+                    totalCount, successCount, failedCount, skippedCount, pushId, status, results, message, null);
         }
 
         public static TemplatePushResult failure(String errorMessage) {
-            return new TemplatePushResult(false, null, null, null, 0, 0, 0, 0, null, null, Collections.emptyList(), null, errorMessage);
+            return new TemplatePushResult(false, null, null, null, 0, 0, 0, 0,
+                    null, null, Collections.emptyList(), null, errorMessage);
         }
 
-        public boolean isSuccess() {
-            return success;
-        }
-
-        public String getTemplateCode() {
-            return templateCode;
-        }
-
-        public String getResolvedTitle() {
-            return resolvedTitle;
-        }
-
-        public String getResolvedContent() {
-            return resolvedContent;
-        }
-
-        public int getTotalCount() {
-            return totalCount;
-        }
-
-        public int getSuccessCount() {
-            return successCount;
-        }
-
-        public int getFailedCount() {
-            return failedCount;
-        }
-
-        public int getSkippedCount() {
-            return skippedCount;
-        }
-
-        /**
-         * 푸시 ID (개인 발송 시 사용, 다중 발송 시 첫 번째 결과의 pushId)
-         */
-        public Long getPushId() {
-            return pushId;
-        }
-
-        /**
-         * 발송 상태 (개인 발송 시 사용, 다중 발송 시 첫 번째 결과의 status)
-         */
-        public String getStatus() {
-            return status;
-        }
-
-        /**
-         * 개별 발송 결과 목록 (다중 발송 시 사용)
-         */
-        public List<PushResultItem> getResults() {
-            return results;
-        }
-
-        public String getMessage() {
-            return message;
-        }
-
-        public String getErrorMessage() {
-            return errorMessage;
-        }
+        public boolean isSuccess() { return success; }
+        public String getTemplateCode() { return templateCode; }
+        public String getResolvedTitle() { return resolvedTitle; }
+        public String getResolvedContent() { return resolvedContent; }
+        public int getTotalCount() { return totalCount; }
+        public int getSuccessCount() { return successCount; }
+        public int getFailedCount() { return failedCount; }
+        public int getSkippedCount() { return skippedCount; }
+        public Long getPushId() { return pushId; }
+        public String getStatus() { return status; }
+        public List<PushResultItem> getResults() { return results; }
+        public String getMessage() { return message; }
+        public String getErrorMessage() { return errorMessage; }
 
         @Override
         public String toString() {
             if (success) {
-                return String.format("TemplatePushResult{success=true, template='%s', pushId=%d, status='%s', total=%d, success=%d, failed=%d, skipped=%d}",
-                        templateCode, pushId, status, totalCount, successCount, failedCount, skippedCount);
+                return String.format(
+                        "TemplatePushResult{success=true, template='%s', pushId=%d, status='%s', total=%d, success=%d, failed=%d, skipped=%d}",
+                        templateCode, pushId, status, totalCount, successCount, failedCount, skippedCount
+                );
             } else {
                 return String.format("TemplatePushResult{success=false, error='%s'}", errorMessage);
             }
