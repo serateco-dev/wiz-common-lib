@@ -6,6 +6,10 @@ import org.springframework.http.*;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * 푸시 서비스 클라이언트
  *
@@ -16,8 +20,13 @@ import org.springframework.web.client.RestTemplate;
  * {@code
  * @Configuration
  * public class PushClientConfig {
- *     @Value("${microservice.message.url:http://wizmessage:8095}")
+ *     @Value("${microservice.message.url:http://wizmessage:8098}")
  *     private String messageServiceUrl;
+ *
+ *     @Bean
+ *     public RestTemplate restTemplate() {
+ *         return new RestTemplate();
+ *     }
  *
  *     @Bean
  *     public PushClient pushClient(RestTemplate restTemplate) {
@@ -49,7 +58,7 @@ import org.springframework.web.client.RestTemplate;
  *         }
  *     }
  *
- *     // 템플릿 푸시
+ *     // 템플릿 푸시 (개인 발송)
  *     public void notifyOrderComplete(Long userNo, String orderNo) {
  *         PushUtil.TemplatePushRequest request = PushUtil.templateBuilder()
  *             .serviceId("NEST")
@@ -60,7 +69,30 @@ import org.springframework.web.client.RestTemplate;
  *
  *         PushClient.TemplatePushResult result = pushClient.sendTemplate(request);
  *         if (result.isSuccess()) {
- *             log.info("템플릿 푸시 발송 성공: {}", result.getResolvedTitle());
+ *             log.info("템플릿 푸시 발송 성공 - pushId: {}, status: {}",
+ *                     result.getPushId(), result.getStatus());
+ *         }
+ *     }
+ *
+ *     // 템플릿 푸시 (다중 발송)
+ *     public void notifyMarketingEvent(List<Long> userNos, String eventName) {
+ *         PushUtil.TemplatePushRequest request = PushUtil.templateBuilder()
+ *             .serviceId("NEST")
+ *             .templateCode("MARKETING_EVENT")
+ *             .userNos(userNos)
+ *             .variable("eventName", eventName)
+ *             .build();
+ *
+ *         PushClient.TemplatePushResult result = pushClient.sendTemplate(request);
+ *         if (result.isSuccess()) {
+ *             log.info("다중 발송 완료 - 성공: {}, 실패: {}",
+ *                     result.getSuccessCount(), result.getFailedCount());
+ *
+ *             // 개별 결과 확인
+ *             for (PushClient.PushResultItem item : result.getResults()) {
+ *                 log.info("userNo: {}, pushId: {}, status: {}",
+ *                         item.getUserNo(), item.getPushId(), item.getStatus());
+ *             }
  *         }
  *     }
  * }
@@ -81,7 +113,7 @@ public class PushClient {
      * 생성자
      *
      * @param restTemplate RestTemplate 인스턴스
-     * @param baseUrl 푸시 서비스 기본 URL (예: http://wizmessage:8095)
+     * @param baseUrl 푸시 서비스 기본 URL (예: http://wizmessage:8098)
      */
     public PushClient(RestTemplate restTemplate, String baseUrl) {
         this.restTemplate = restTemplate;
@@ -204,14 +236,27 @@ public class PushClient {
                     Integer skippedCount = dataMap.get("skippedCount") != null ?
                             ((Number) dataMap.get("skippedCount")).intValue() : 0;
 
+                    // results 배열 파싱
+                    List<PushResultItem> results = parseResults(dataMap.get("results"));
+
+                    // 개인 발송인 경우 첫 번째 결과에서 pushId, status 추출
+                    Long pushId = null;
+                    String status = null;
+                    if (!results.isEmpty()) {
+                        PushResultItem firstItem = results.get(0);
+                        pushId = firstItem.getPushId();
+                        status = firstItem.getStatus();
+                    }
+
                     return TemplatePushResult.success(
                             templateCode, resolvedTitle, resolvedContent,
                             totalCount, successCount, failedCount, skippedCount,
+                            pushId, status, results,
                             body.getMessage()
                     );
                 }
 
-                return TemplatePushResult.success(null, null, null, 0, 0, 0, 0, body.getMessage());
+                return TemplatePushResult.success(null, null, null, 0, 0, 0, 0, null, null, Collections.emptyList(), body.getMessage());
             }
 
             return TemplatePushResult.failure("Unexpected response: " + response.getStatusCode());
@@ -220,6 +265,40 @@ public class PushClient {
             log.error("템플릿 푸시 발송 실패 - url: {}, error: {}", url, e.getMessage());
             return TemplatePushResult.failure(e.getMessage());
         }
+    }
+
+    /**
+     * results 배열 파싱
+     */
+    @SuppressWarnings("unchecked")
+    private List<PushResultItem> parseResults(Object resultsObj) {
+        if (resultsObj == null) {
+            return Collections.emptyList();
+        }
+
+        if (!(resultsObj instanceof List)) {
+            return Collections.emptyList();
+        }
+
+        List<?> resultsList = (List<?>) resultsObj;
+        List<PushResultItem> items = new ArrayList<>();
+
+        for (Object item : resultsList) {
+            if (item instanceof java.util.Map) {
+                java.util.Map<String, Object> itemMap = (java.util.Map<String, Object>) item;
+
+                Long pushId = itemMap.get("pushId") != null ?
+                        ((Number) itemMap.get("pushId")).longValue() : null;
+                Long userNo = itemMap.get("userNo") != null ?
+                        ((Number) itemMap.get("userNo")).longValue() : null;
+                String status = (String) itemMap.get("status");
+                String errorMessage = (String) itemMap.get("errorMessage");
+
+                items.add(new PushResultItem(pushId, userNo, status, errorMessage));
+            }
+        }
+
+        return items;
     }
 
     // ========================================
@@ -340,6 +419,48 @@ public class PushClient {
     }
 
     // ========================================
+    // 결과 클래스 - 개별 푸시 결과 항목
+    // ========================================
+
+    /**
+     * 개별 푸시 발송 결과 항목 (다중 발송 시 사용)
+     */
+    public static class PushResultItem {
+        private final Long pushId;
+        private final Long userNo;
+        private final String status;
+        private final String errorMessage;
+
+        public PushResultItem(Long pushId, Long userNo, String status, String errorMessage) {
+            this.pushId = pushId;
+            this.userNo = userNo;
+            this.status = status;
+            this.errorMessage = errorMessage;
+        }
+
+        public Long getPushId() {
+            return pushId;
+        }
+
+        public Long getUserNo() {
+            return userNo;
+        }
+
+        public String getStatus() {
+            return status;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("PushResultItem{pushId=%d, userNo=%d, status='%s'}", pushId, userNo, status);
+        }
+    }
+
+    // ========================================
     // 결과 클래스 - 템플릿 푸시
     // ========================================
 
@@ -355,12 +476,16 @@ public class PushClient {
         private final int successCount;
         private final int failedCount;
         private final int skippedCount;
+        private final Long pushId;
+        private final String status;
+        private final List<PushResultItem> results;
         private final String message;
         private final String errorMessage;
 
         private TemplatePushResult(boolean success, String templateCode,
                                    String resolvedTitle, String resolvedContent,
                                    int totalCount, int successCount, int failedCount, int skippedCount,
+                                   Long pushId, String status, List<PushResultItem> results,
                                    String message, String errorMessage) {
             this.success = success;
             this.templateCode = templateCode;
@@ -370,37 +495,92 @@ public class PushClient {
             this.successCount = successCount;
             this.failedCount = failedCount;
             this.skippedCount = skippedCount;
+            this.pushId = pushId;
+            this.status = status;
+            this.results = results != null ? results : Collections.emptyList();
             this.message = message;
             this.errorMessage = errorMessage;
         }
 
         public static TemplatePushResult success(String templateCode, String resolvedTitle, String resolvedContent,
                                                  int totalCount, int successCount, int failedCount, int skippedCount,
+                                                 Long pushId, String status, List<PushResultItem> results,
                                                  String message) {
             return new TemplatePushResult(true, templateCode, resolvedTitle, resolvedContent,
-                    totalCount, successCount, failedCount, skippedCount, message, null);
+                    totalCount, successCount, failedCount, skippedCount,
+                    pushId, status, results, message, null);
         }
 
         public static TemplatePushResult failure(String errorMessage) {
-            return new TemplatePushResult(false, null, null, null, 0, 0, 0, 0, null, errorMessage);
+            return new TemplatePushResult(false, null, null, null, 0, 0, 0, 0, null, null, Collections.emptyList(), null, errorMessage);
         }
 
-        public boolean isSuccess() { return success; }
-        public String getTemplateCode() { return templateCode; }
-        public String getResolvedTitle() { return resolvedTitle; }
-        public String getResolvedContent() { return resolvedContent; }
-        public int getTotalCount() { return totalCount; }
-        public int getSuccessCount() { return successCount; }
-        public int getFailedCount() { return failedCount; }
-        public int getSkippedCount() { return skippedCount; }
-        public String getMessage() { return message; }
-        public String getErrorMessage() { return errorMessage; }
+        public boolean isSuccess() {
+            return success;
+        }
+
+        public String getTemplateCode() {
+            return templateCode;
+        }
+
+        public String getResolvedTitle() {
+            return resolvedTitle;
+        }
+
+        public String getResolvedContent() {
+            return resolvedContent;
+        }
+
+        public int getTotalCount() {
+            return totalCount;
+        }
+
+        public int getSuccessCount() {
+            return successCount;
+        }
+
+        public int getFailedCount() {
+            return failedCount;
+        }
+
+        public int getSkippedCount() {
+            return skippedCount;
+        }
+
+        /**
+         * 푸시 ID (개인 발송 시 사용, 다중 발송 시 첫 번째 결과의 pushId)
+         */
+        public Long getPushId() {
+            return pushId;
+        }
+
+        /**
+         * 발송 상태 (개인 발송 시 사용, 다중 발송 시 첫 번째 결과의 status)
+         */
+        public String getStatus() {
+            return status;
+        }
+
+        /**
+         * 개별 발송 결과 목록 (다중 발송 시 사용)
+         */
+        public List<PushResultItem> getResults() {
+            return results;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage;
+        }
 
         @Override
         public String toString() {
             if (success) {
-                return String.format("TemplatePushResult{success=true, template='%s', total=%d, success=%d, failed=%d, skipped=%d}",
-                        templateCode, totalCount, successCount, failedCount, skippedCount);
+                return String.format("TemplatePushResult{success=true, template='%s', pushId=%d, status='%s', total=%d, success=%d, failed=%d, skipped=%d}",
+                        templateCode, pushId, status, totalCount, successCount, failedCount, skippedCount);
             } else {
                 return String.format("TemplatePushResult{success=false, error='%s'}", errorMessage);
             }
