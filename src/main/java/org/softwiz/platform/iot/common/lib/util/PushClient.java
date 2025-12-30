@@ -2,6 +2,7 @@ package org.softwiz.platform.iot.common.lib.util;
 
 import lombok.extern.slf4j.Slf4j;
 import org.softwiz.platform.iot.common.lib.dto.ApiResponse;
+import org.softwiz.platform.iot.common.lib.validator.GatewaySignatureValidator;
 import org.springframework.http.*;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -17,23 +18,28 @@ import java.util.List;
  * 푸시 서비스 클라이언트
  *
  * <p>다른 마이크로서비스에서 WizMessage 푸시 서비스를 호출할 때 사용합니다.</p>
- * <p>Gateway 헤더(X-Gateway-Signature, X-Gateway-Timestamp)를 자동으로 전달합니다.</p>
+ * <p>Gateway 헤더(X-Gateway-Signature, X-Gateway-Timestamp)를 자동으로 전달하거나 생성합니다.</p>
+ *
+ * <h3>헤더 처리 우선순위:</h3>
+ * <ol>
+ *   <li>현재 요청에 Gateway 헤더가 있으면 복사하여 전달</li>
+ *   <li>없으면 내부 서비스 호출용으로 직접 생성 (GatewaySignatureValidator 사용)</li>
+ * </ol>
+ *
+ * <h3>보안 참고:</h3>
+ * <p>K8s NetworkPolicy로 같은 네임스페이스 내 Pod 간 통신만 허용되므로,
+ * 외부에서 직접 마이크로서비스 API 호출은 불가능합니다.</p>
  *
  * <pre>{@code
- * 사용 예시 (Spring Bean으로 등록):
  * @Configuration
  * public class PushClientConfig {
  *     @Value("${microservice.message.url:http://wizmessage:8098}")
  *     private String messageServiceUrl;
  *
  *     @Bean
- *     public RestTemplate restTemplate() {
- *         return new RestTemplate();
- *     }
- *
- *     @Bean
- *     public PushClient pushClient(RestTemplate restTemplate) {
- *         return new PushClient(restTemplate, messageServiceUrl);
+ *     public PushClient pushClient(RestTemplate restTemplate,
+ *                                   GatewaySignatureValidator signatureValidator) {
+ *         return new PushClient(restTemplate, messageServiceUrl, signatureValidator);
  *     }
  * }
  * }</pre>
@@ -43,20 +49,35 @@ public class PushClient {
 
     private final RestTemplate restTemplate;
     private final String baseUrl;
+    private final GatewaySignatureValidator signatureValidator;
 
     private static final String PUSH_SEND_PATH = "/api/v2/push/send";
     private static final String TOKEN_SAVE_PATH = "/api/v2/push/token/save";
     private static final String TEMPLATE_SEND_PATH = "/api/v2/push/template/send";
 
     /**
-     * 생성자
+     * 생성자 (GatewaySignatureValidator 포함)
      *
      * @param restTemplate RestTemplate 인스턴스
      * @param baseUrl 푸시 서비스 기본 URL (예: http://wizmessage:8098)
+     * @param signatureValidator Gateway 서명 검증/생성기
      */
-    public PushClient(RestTemplate restTemplate, String baseUrl) {
+    public PushClient(RestTemplate restTemplate, String baseUrl, GatewaySignatureValidator signatureValidator) {
         this.restTemplate = restTemplate;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
+        this.signatureValidator = signatureValidator;
+    }
+
+    /**
+     * 생성자 (하위 호환성 유지)
+     *
+     * @param restTemplate RestTemplate 인스턴스
+     * @param baseUrl 푸시 서비스 기본 URL
+     * @deprecated signatureValidator를 포함하는 생성자 사용 권장
+     */
+    @Deprecated
+    public PushClient(RestTemplate restTemplate, String baseUrl) {
+        this(restTemplate, baseUrl, null);
     }
 
     // ========================================
@@ -175,10 +196,8 @@ public class PushClient {
                     Integer skippedCount = dataMap.get("skippedCount") != null ?
                             ((Number) dataMap.get("skippedCount")).intValue() : 0;
 
-                    // results 배열 파싱
                     List<PushResultItem> results = parseResults(dataMap.get("results"));
 
-                    // 개인 발송인 경우 첫 번째 결과에서 pushId, status 추출
                     Long pushId = null;
                     String status = null;
                     if (!results.isEmpty()) {
@@ -287,13 +306,20 @@ public class PushClient {
 
     /**
      * HTTP 헤더 생성
-     * 현재 요청의 Gateway 헤더를 자동으로 복사합니다.
+     *
+     * <p>처리 순서:</p>
+     * <ol>
+     *   <li>현재 HTTP 요청 컨텍스트에서 Gateway 헤더 복사 시도</li>
+     *   <li>Gateway 헤더가 없으면 내부 서비스 호출용으로 직접 생성</li>
+     * </ol>
      */
     private HttpHeaders createHeaders(String accessToken) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // 현재 요청의 Gateway 헤더 복사
+        boolean hasGatewayHeaders = false;
+
+        // 1. 현재 요청의 Gateway 헤더 복사 시도
         try {
             ServletRequestAttributes attributes =
                     (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
@@ -301,25 +327,43 @@ public class PushClient {
             if (attributes != null) {
                 HttpServletRequest currentRequest = attributes.getRequest();
 
-                // X-Gateway-Signature 헤더 복사
                 String signature = currentRequest.getHeader("X-Gateway-Signature");
-                if (signature != null && !signature.isEmpty()) {
-                    headers.set("X-Gateway-Signature", signature);
-                    log.debug("Gateway Signature 헤더 복사: {}", signature);
-                }
-
-                // X-Gateway-Timestamp 헤더 복사
                 String timestamp = currentRequest.getHeader("X-Gateway-Timestamp");
-                if (timestamp != null && !timestamp.isEmpty()) {
+
+                if (signature != null && !signature.isEmpty() &&
+                        timestamp != null && !timestamp.isEmpty()) {
+                    headers.set("X-Gateway-Signature", signature);
                     headers.set("X-Gateway-Timestamp", timestamp);
-                    log.debug("Gateway Timestamp 헤더 복사: {}", timestamp);
+                    hasGatewayHeaders = true;
+                    log.debug("Gateway 헤더 복사 완료 - signature: {}..., timestamp: {}",
+                            signature.substring(0, Math.min(10, signature.length())), timestamp);
                 }
             }
         } catch (Exception e) {
-            log.warn("Gateway 헤더 복사 실패 (요청 컨텍스트 없음): {}", e.getMessage());
+            log.debug("현재 요청 컨텍스트에서 Gateway 헤더 복사 실패: {}", e.getMessage());
         }
 
-        // AccessToken이 제공된 경우 Bearer 토큰 추가
+        // 2. Gateway 헤더가 없으면 내부 서비스 호출용으로 직접 생성
+        if (!hasGatewayHeaders) {
+            if (signatureValidator != null) {
+                try {
+                    String timestamp = signatureValidator.generateTimestamp();
+                    String signature = signatureValidator.generateSignature(timestamp);
+
+                    headers.set("X-Gateway-Signature", signature);
+                    headers.set("X-Gateway-Timestamp", timestamp);
+
+                    log.debug("내부 서비스 호출용 Gateway 헤더 생성 완료 - timestamp: {}", timestamp);
+                } catch (Exception e) {
+                    log.warn("Gateway 헤더 생성 실패 (signatureValidator 오류): {}", e.getMessage());
+                }
+            } else {
+                log.warn("Gateway 헤더 생성 불가 - signatureValidator가 null입니다. " +
+                        "PushClient 생성 시 GatewaySignatureValidator를 주입하세요.");
+            }
+        }
+
+        // 3. AccessToken이 제공된 경우 Bearer 토큰 추가
         if (accessToken != null && !accessToken.isEmpty()) {
             headers.setBearerAuth(accessToken);
         }
