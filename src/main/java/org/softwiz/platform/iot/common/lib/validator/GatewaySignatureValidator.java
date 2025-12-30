@@ -38,6 +38,13 @@ public class GatewaySignatureValidator {
     private static final String MOCK_SIGNATURE = "MOCK_GATEWAY_SIGNATURE_FOR_TESTING";
 
     /**
+     * 내부 서비스 간 통신용 서명 데이터 형식
+     * Gateway와 다른 형식을 사용하여 구분
+     */
+    private static final String INTERNAL_SERVICE_METHOD = "INTERNAL";
+    private static final String INTERNAL_SERVICE_URI = "/internal/service-call";
+
+    /**
      * Gateway 서명 검증
      *
      * @param request HTTP 요청
@@ -55,7 +62,7 @@ public class GatewaySignatureValidator {
 
         // 1. Mock 시그니처 체크 (로컬 테스트용)
         if (mockEnabled && MOCK_SIGNATURE.equals(signature)) {
-            log.debug("✅ Mock signature accepted (mock-enabled=true)");
+            log.debug("Mock signature accepted (mock-enabled=true)");
             return true;
         }
 
@@ -86,13 +93,20 @@ public class GatewaySignatureValidator {
             return false;
         }
 
-        // 4. 전체 URI 구성 (쿼리 파라미터 포함)
+        // 4. 내부 서비스 호출 서명 검증 (먼저 체크)
+        String internalSignature = generateInternalSignature(timestamp);
+        if (internalSignature.equals(signature)) {
+            log.debug("Internal service call signature validated");
+            return true;
+        }
+
+        // 5. 전체 URI 구성 (쿼리 파라미터 포함)
         String requestUri = request.getRequestURI();
         String queryString = request.getQueryString();
         String fullUri = queryString != null ? requestUri + "?" + queryString : requestUri;
         String method = request.getMethod();
 
-        // 5. 서명 검증
+        // 6. Gateway 서명 검증
         String expectedSignature = generateSignature(method, fullUri, timestamp);
         boolean isValid = expectedSignature.equals(signature);
 
@@ -142,6 +156,47 @@ public class GatewaySignatureValidator {
             return "";
         }
     }
+
+    // ========================================
+    // 내부 서비스 간 호출용 메서드
+    // ========================================
+
+    /**
+     * 내부 서비스 호출용 타임스탬프 생성
+     *
+     * @return 현재 시간의 타임스탬프 (밀리초)
+     */
+    public String generateTimestamp() {
+        return String.valueOf(System.currentTimeMillis());
+    }
+
+    /**
+     * 내부 서비스 호출용 서명 생성
+     *
+     * <p>마이크로서비스 간 직접 통신 시 사용합니다.</p>
+     * <p>K8s NetworkPolicy로 같은 네임스페이스 내 Pod 간 통신만 허용되므로,
+     * 외부에서 이 서명을 생성해도 네트워크 레벨에서 차단됩니다.</p>
+     *
+     * @param timestamp 타임스탬프
+     * @return Base64 인코딩된 서명
+     */
+    public String generateSignature(String timestamp) {
+        return generateInternalSignature(timestamp);
+    }
+
+    /**
+     * 내부 서비스 호출용 서명 생성 (내부 메서드)
+     *
+     * @param timestamp 타임스탬프
+     * @return Base64 인코딩된 서명
+     */
+    private String generateInternalSignature(String timestamp) {
+        return generateSignature(INTERNAL_SERVICE_METHOD, INTERNAL_SERVICE_URI, timestamp);
+    }
+
+    // ========================================
+    // Mock 관련 메서드
+    // ========================================
 
     /**
      * Mock 시그니처 반환
