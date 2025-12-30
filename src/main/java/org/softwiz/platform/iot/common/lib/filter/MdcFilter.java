@@ -76,20 +76,19 @@ public class MdcFilter implements Filter {
         }
     }
 
-    /**
-     * Request ID 추출 또는 생성
-     * - 게이트웨이가 보낸 X-Request-Id가 있으면 사용 (정상 케이스)
-     * - 없으면 새로 생성 (직접 호출 시 fallback)
-     */
     private String extractRequestId(HttpServletRequest request) {
         String requestId = request.getHeader("X-Request-Id");
+        String uri = request.getRequestURI();
 
         if (requestId == null || requestId.isEmpty()) {
-            // 게이트웨이를 거치지 않은 직접 호출
             requestId = generateShortUuid();
-            log.warn("X-Request-Id header missing, generated new ID: {} (Direct call bypassing gateway?)", requestId);
-        } else {
-            log.debug("Using Request ID from gateway: {}", requestId);
+
+            // actuator, health check는 debug로
+            if (uri.startsWith("/actuator") || uri.equals("/health")) {
+                log.debug("Generated Request ID for internal call: {} - {}", requestId, uri);
+            } else {
+                log.warn("X-Request-Id missing: {} - {} (Direct call?)", requestId, uri);
+            }
         }
 
         return requestId;
