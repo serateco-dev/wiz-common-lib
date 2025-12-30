@@ -23,7 +23,7 @@ import java.util.List;
  * <h3>헤더 처리 우선순위:</h3>
  * <ol>
  *   <li>현재 요청에 Gateway 헤더가 있으면 복사하여 전달</li>
- *   <li>없으면 내부 서비스 호출용으로 직접 생성 (GatewaySignatureValidator 사용)</li>
+ *   <li>없으면 실제 호출할 URI로 서명을 직접 생성 (GatewaySignatureValidator 사용)</li>
  * </ol>
  *
  * <h3>보안 참고:</h3>
@@ -105,7 +105,8 @@ public class PushClient {
         String url = baseUrl + PUSH_SEND_PATH;
 
         try {
-            HttpHeaders headers = createHeaders(accessToken);
+            // ✅ 실제 호출할 Method와 URI로 헤더 생성
+            HttpHeaders headers = createHeaders(accessToken, "POST", PUSH_SEND_PATH);
             HttpEntity<PushUtil.PushRequest> entity = new HttpEntity<>(request, headers);
 
             ResponseEntity<ApiResponse> response = restTemplate.exchange(
@@ -165,7 +166,8 @@ public class PushClient {
         String url = baseUrl + TEMPLATE_SEND_PATH;
 
         try {
-            HttpHeaders headers = createHeaders(accessToken);
+            // ✅ 실제 호출할 Method와 URI로 헤더 생성
+            HttpHeaders headers = createHeaders(accessToken, "POST", TEMPLATE_SEND_PATH);
             HttpEntity<PushUtil.TemplatePushRequest> entity = new HttpEntity<>(request, headers);
 
             ResponseEntity<ApiResponse> response = restTemplate.exchange(
@@ -286,7 +288,8 @@ public class PushClient {
         String url = baseUrl + TOKEN_SAVE_PATH;
 
         try {
-            HttpHeaders headers = createHeaders(accessToken);
+            // ✅ 실제 호출할 Method와 URI로 헤더 생성
+            HttpHeaders headers = createHeaders(accessToken, "POST", TOKEN_SAVE_PATH);
             HttpEntity<PushUtil.TokenRequest> entity = new HttpEntity<>(request, headers);
 
             ResponseEntity<ApiResponse> response = restTemplate.exchange(
@@ -310,10 +313,15 @@ public class PushClient {
      * <p>처리 순서:</p>
      * <ol>
      *   <li>현재 HTTP 요청 컨텍스트에서 Gateway 헤더 복사 시도</li>
-     *   <li>Gateway 헤더가 없으면 내부 서비스 호출용으로 직접 생성</li>
+     *   <li>Gateway 헤더가 없으면 실제 호출할 method와 uri로 서명 생성</li>
      * </ol>
+     *
+     * @param accessToken Bearer 토큰 (선택)
+     * @param method HTTP Method (예: POST, GET)
+     * @param uri 요청 URI (예: /api/v2/push/send)
+     * @return HTTP 헤더
      */
-    private HttpHeaders createHeaders(String accessToken) {
+    private HttpHeaders createHeaders(String accessToken, String method, String uri) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
@@ -343,17 +351,20 @@ public class PushClient {
             log.debug("현재 요청 컨텍스트에서 Gateway 헤더 복사 실패: {}", e.getMessage());
         }
 
-        // 2. Gateway 헤더가 없으면 내부 서비스 호출용으로 직접 생성
+        // 2. Gateway 헤더가 없으면 실제 호출할 URI로 서명 생성
         if (!hasGatewayHeaders) {
             if (signatureValidator != null) {
                 try {
                     String timestamp = signatureValidator.generateTimestamp();
-                    String signature = signatureValidator.generateSignature(timestamp);
+
+                    // ✅ 실제 호출할 method와 uri로 서명 생성
+                    String signature = signatureValidator.generateSignature(method, uri, timestamp);
 
                     headers.set("X-Gateway-Signature", signature);
                     headers.set("X-Gateway-Timestamp", timestamp);
 
-                    log.debug("내부 서비스 호출용 Gateway 헤더 생성 완료 - timestamp: {}", timestamp);
+                    log.debug("내부 서비스 호출용 Gateway 헤더 생성 완료 - method: {}, uri: {}, timestamp: {}",
+                            method, uri, timestamp);
                 } catch (Exception e) {
                     log.warn("Gateway 헤더 생성 실패 (signatureValidator 오류): {}", e.getMessage());
                 }
