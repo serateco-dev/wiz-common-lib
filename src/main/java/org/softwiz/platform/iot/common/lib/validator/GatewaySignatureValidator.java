@@ -129,15 +129,21 @@ public class GatewaySignatureValidator {
         return isValid;
     }
 
+    // ========================================
+    // 서명 생성 메서드 (public으로 노출)
+    // ========================================
+
     /**
      * 서명 생성 (HMAC-SHA256)
      *
-     * @param method HTTP 메서드
-     * @param uri 요청 URI (쿼리 파라미터 포함)
+     * ✅ PushClient 등 내부 서비스에서 실제 URI로 서명 생성 시 사용
+     *
+     * @param method HTTP 메서드 (예: POST, GET)
+     * @param uri 요청 URI (예: /api/v2/push/send)
      * @param timestamp 타임스탬프
      * @return Base64 인코딩된 서명
      */
-    private String generateSignature(String method, String uri, String timestamp) {
+    public String generateSignature(String method, String uri, String timestamp) {
         try {
             String data = String.format("%s:%s:%s", method, uri, timestamp);
 
@@ -171,7 +177,7 @@ public class GatewaySignatureValidator {
     }
 
     /**
-     * 내부 서비스 호출용 서명 생성
+     * 내부 서비스 호출용 서명 생성 (INTERNAL 방식)
      *
      * <p>마이크로서비스 간 직접 통신 시 사용합니다.</p>
      * <p>K8s NetworkPolicy로 같은 네임스페이스 내 Pod 간 통신만 허용되므로,
