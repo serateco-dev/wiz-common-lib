@@ -6,10 +6,7 @@ import org.softwiz.platform.iot.common.lib.validator.GatewaySignatureValidator;
 import org.springframework.http.*;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -18,13 +15,11 @@ import java.util.List;
  * 푸시 서비스 클라이언트
  *
  * <p>다른 마이크로서비스에서 WizMessage 푸시 서비스를 호출할 때 사용합니다.</p>
- * <p>Gateway 헤더(X-Gateway-Signature, X-Gateway-Timestamp)를 자동으로 전달하거나 생성합니다.</p>
+ * <p>내부 서비스 간 통신을 위해 항상 새로운 Gateway 서명을 생성합니다.</p>
  *
- * <h3>헤더 처리 우선순위:</h3>
- * <ol>
- *   <li>현재 요청에 Gateway 헤더가 있으면 복사하여 전달</li>
- *   <li>없으면 실제 호출할 URI로 서명을 직접 생성 (GatewaySignatureValidator 사용)</li>
- * </ol>
+ * <h3>헤더 처리:</h3>
+ * <p>실제 호출할 method와 uri로 서명을 생성하여 전달합니다.</p>
+ * <p>다른 서비스의 Gateway 헤더를 복사하지 않습니다.</p>
  *
  * <h3>보안 참고:</h3>
  * <p>K8s NetworkPolicy로 같은 네임스페이스 내 Pod 간 통신만 허용되므로,
@@ -105,7 +100,6 @@ public class PushClient {
         String url = baseUrl + PUSH_SEND_PATH;
 
         try {
-            // ✅ 실제 호출할 Method와 URI로 헤더 생성
             HttpHeaders headers = createHeaders(accessToken, "POST", PUSH_SEND_PATH);
             HttpEntity<PushUtil.PushRequest> entity = new HttpEntity<>(request, headers);
 
@@ -166,7 +160,6 @@ public class PushClient {
         String url = baseUrl + TEMPLATE_SEND_PATH;
 
         try {
-            // ✅ 실제 호출할 Method와 URI로 헤더 생성
             HttpHeaders headers = createHeaders(accessToken, "POST", TEMPLATE_SEND_PATH);
             HttpEntity<PushUtil.TemplatePushRequest> entity = new HttpEntity<>(request, headers);
 
@@ -288,7 +281,6 @@ public class PushClient {
         String url = baseUrl + TOKEN_SAVE_PATH;
 
         try {
-            // ✅ 실제 호출할 Method와 URI로 헤더 생성
             HttpHeaders headers = createHeaders(accessToken, "POST", TOKEN_SAVE_PATH);
             HttpEntity<PushUtil.TokenRequest> entity = new HttpEntity<>(request, headers);
 
@@ -310,11 +302,8 @@ public class PushClient {
     /**
      * HTTP 헤더 생성
      *
-     * <p>처리 순서:</p>
-     * <ol>
-     *   <li>현재 HTTP 요청 컨텍스트에서 Gateway 헤더 복사 시도</li>
-     *   <li>Gateway 헤더가 없으면 실제 호출할 method와 uri로 서명 생성</li>
-     * </ol>
+     * <p>내부 서비스 간 통신을 위해 항상 새로운 서명을 생성합니다.</p>
+     * <p>실제 호출할 method와 uri를 사용하여 서명을 생성합니다.</p>
      *
      * @param accessToken Bearer 토큰 (선택)
      * @param method HTTP Method (예: POST, GET)
@@ -325,56 +314,28 @@ public class PushClient {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        boolean hasGatewayHeaders = false;
+        // ✅ 내부 서비스 간 통신은 항상 새로운 서명 생성
+        if (signatureValidator != null) {
+            try {
+                String timestamp = signatureValidator.generateTimestamp();
 
-        // 1. 현재 요청의 Gateway 헤더 복사 시도
-        try {
-            ServletRequestAttributes attributes =
-                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+                // ✅ 실제 호출할 method와 uri로 서명 생성 (다른 서비스의 헤더를 복사하지 않음!)
+                String signature = signatureValidator.generateSignature(method, uri, timestamp);
 
-            if (attributes != null) {
-                HttpServletRequest currentRequest = attributes.getRequest();
+                headers.set("X-Gateway-Signature", signature);
+                headers.set("X-Gateway-Timestamp", timestamp);
 
-                String signature = currentRequest.getHeader("X-Gateway-Signature");
-                String timestamp = currentRequest.getHeader("X-Gateway-Timestamp");
-
-                if (signature != null && !signature.isEmpty() &&
-                        timestamp != null && !timestamp.isEmpty()) {
-                    headers.set("X-Gateway-Signature", signature);
-                    headers.set("X-Gateway-Timestamp", timestamp);
-                    hasGatewayHeaders = true;
-                    log.debug("Gateway 헤더 복사 완료 - signature: {}..., timestamp: {}",
-                            signature.substring(0, Math.min(10, signature.length())), timestamp);
-                }
+                log.debug("내부 서비스 호출용 서명 생성 완료 - method: {}, uri: {}, timestamp: {}, signature: {}...",
+                        method, uri, timestamp, signature.substring(0, Math.min(10, signature.length())));
+            } catch (Exception e) {
+                log.error("Gateway 헤더 생성 실패", e);
             }
-        } catch (Exception e) {
-            log.debug("현재 요청 컨텍스트에서 Gateway 헤더 복사 실패: {}", e.getMessage());
+        } else {
+            log.warn("Gateway 헤더 생성 불가 - signatureValidator가 null입니다. " +
+                    "PushClient 생성 시 GatewaySignatureValidator를 주입하세요.");
         }
 
-        // 2. Gateway 헤더가 없으면 실제 호출할 URI로 서명 생성
-        if (!hasGatewayHeaders) {
-            if (signatureValidator != null) {
-                try {
-                    String timestamp = signatureValidator.generateTimestamp();
-
-                    // ✅ 실제 호출할 method와 uri로 서명 생성
-                    String signature = signatureValidator.generateSignature(method, uri, timestamp);
-
-                    headers.set("X-Gateway-Signature", signature);
-                    headers.set("X-Gateway-Timestamp", timestamp);
-
-                    log.debug("내부 서비스 호출용 Gateway 헤더 생성 완료 - method: {}, uri: {}, timestamp: {}",
-                            method, uri, timestamp);
-                } catch (Exception e) {
-                    log.warn("Gateway 헤더 생성 실패 (signatureValidator 오류): {}", e.getMessage());
-                }
-            } else {
-                log.warn("Gateway 헤더 생성 불가 - signatureValidator가 null입니다. " +
-                        "PushClient 생성 시 GatewaySignatureValidator를 주입하세요.");
-            }
-        }
-
-        // 3. AccessToken이 제공된 경우 Bearer 토큰 추가
+        // AccessToken이 제공된 경우 Bearer 토큰 추가
         if (accessToken != null && !accessToken.isEmpty()) {
             headers.setBearerAuth(accessToken);
         }
