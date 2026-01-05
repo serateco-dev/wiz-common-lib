@@ -6,6 +6,7 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
 import jakarta.annotation.PostConstruct;
+import java.util.TimeZone;
 
 /**
  * WIZ Common Library Auto Configuration
@@ -74,6 +75,7 @@ import jakarta.annotation.PostConstruct;
  * - crypto.iv는 반드시 16바이트여야 합니다 (AES 블록 크기)
  * - jwt.secret는 HS256 알고리즘을 위해 최소 256비트 이상 권장
  * - 운영 환경에서는 모든 secret 값을 환경변수 또는 암호화된 설정으로 관리하세요
+ * - 모든 서비스의 기본 타임존은 Asia/Seoul로 자동 설정됩니다
  */
 
 @Slf4j
@@ -95,6 +97,9 @@ public class CommonLibAutoConfiguration {
 
     @PostConstruct
     public void init() {
+        // ★★★ 타임존 설정 (가장 먼저 실행) ★★★
+        initializeTimeZone();
+
         log.info("========================================");
         log.info("WIZ Common Library Initialized");
         log.info("========================================");
@@ -119,6 +124,33 @@ public class CommonLibAutoConfiguration {
         log.info("   gateway.signature.secret");
         log.info("   security.publicPaths");
         log.info("========================================");
+    }
+
+    /**
+     * 타임존 초기화
+     * - JVM 기본 타임존을 Asia/Seoul로 설정
+     * - 모든 날짜/시간 처리에 일관된 타임존 적용
+     */
+    private void initializeTimeZone() {
+        TimeZone seoulTimeZone = TimeZone.getTimeZone("Asia/Seoul");
+        TimeZone.setDefault(seoulTimeZone);
+
+        log.info("========================================");
+        log.info("✅ TimeZone Configuration");
+        log.info("   Default TimeZone: {}", TimeZone.getDefault().getID());
+        log.info("   Display Name: {}", TimeZone.getDefault().getDisplayName());
+        log.info("   Offset: UTC{}", getOffsetString(seoulTimeZone));
+        log.info("========================================");
+    }
+
+    /**
+     * UTC 오프셋 문자열 생성 (예: +09:00)
+     */
+    private String getOffsetString(TimeZone timeZone) {
+        int offsetMillis = timeZone.getRawOffset();
+        int hours = offsetMillis / (1000 * 60 * 60);
+        int minutes = Math.abs((offsetMillis / (1000 * 60)) % 60);
+        return String.format("%+03d:%02d", hours, minutes);
     }
 
     /**
