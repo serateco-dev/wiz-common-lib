@@ -37,6 +37,14 @@
 			<scope>provided</scope>
 		</dependency>
 
+		<!-- Spring Boot Mail (provided, optional) - email.enabled=true 일 때만 사용 -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+			<scope>provided</scope>
+			<optional>true</optional>
+		</dependency>
+
 		<!-- Spring Security (provided) -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

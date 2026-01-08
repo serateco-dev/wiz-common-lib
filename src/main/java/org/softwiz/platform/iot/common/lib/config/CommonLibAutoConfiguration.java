@@ -1,7 +1,10 @@
 package org.softwiz.platform.iot.common.lib.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.context.annotation.Configuration;
 
@@ -22,11 +25,12 @@ import java.util.TimeZone;
  * - Services: LoggingService
  * - Exception Handlers: GlobalExceptionHandler
  * - Config: PublicPathConfig
+ * - Email: EmailSender (email.enabled=true 일 때만)
  *
  * 사용법:
  * 1. 마이크로서비스의 pom.xml에 의존성 추가:
  *    <dependency>
- *        <groupId>com.github.사용자이름</groupId> TODO 회사공개깃허브 옮기기
+ *        <groupId>com.github.사용자이름</groupId>
  *        <artifactId>wiz-common-lib</artifactId>
  *        <version>1.0.0</version>
  *    </dependency>
@@ -42,8 +46,9 @@ import java.util.TimeZone;
  *   secret-key: "your-32-byte-secret-key-here!"  # 정확히 32 bytes
  *   iv: "your-16-byte-iv!!"                       # 정확히 16 bytes
  *
- * # JwtUtil (JWT 토큰)
+ * # JwtUtil (JWT 토큰) - jwt.enabled=true 일 때만
  * jwt:
+ *   enabled: true
  *   secret: "your-jwt-secret-key-at-least-256-bits-long-for-hs256-algorithm"
  *   expiration: 3600000              # Access Token: 1시간 (밀리초)
  *   refresh-expiration: 86400000     # Refresh Token: 24시간 (밀리초)
@@ -66,9 +71,21 @@ import java.util.TimeZone;
  *     - /favicon.ico
  * </pre>
  *
- * 선택적 설정:
- * - gateway.signature.enabled=false: Gateway 서명 검증 비활성화 (개발 편의용)
- * - gateway.signature.mock-enabled=true: Mock 서명 허용 (로컬 테스트용)
+ * 선택적 설정 (이메일):
+ * <pre>
+ * # EmailSender (email.enabled=true + spring-boot-starter-mail 의존성 필요)
+ * email:
+ *   enabled: true
+ *   smtp:
+ *     host: smtp.gmail.com
+ *     port: 587
+ *     username: ${SMTP_USERNAME}
+ *     password: ${SMTP_PASSWORD}
+ *     auth: true
+ *     starttls: true
+ *   default-sender: info@softwiz.co.kr
+ *   default-sender-name: WIZ Platform
+ * </pre>
  *
  * 주의사항:
  * - crypto.secret-key는 반드시 32바이트여야 합니다 (AES-256)
@@ -76,8 +93,8 @@ import java.util.TimeZone;
  * - jwt.secret는 HS256 알고리즘을 위해 최소 256비트 이상 권장
  * - 운영 환경에서는 모든 secret 값을 환경변수 또는 암호화된 설정으로 관리하세요
  * - 모든 서비스의 기본 타임존은 Asia/Seoul로 자동 설정됩니다
+ * - EmailSender는 email.enabled=true이고 spring-boot-starter-mail 의존성이 있을 때만 활성화됩니다
  */
-
 @Slf4j
 @Configuration
 @ComponentScan(basePackages = {
@@ -91,6 +108,7 @@ import java.util.TimeZone;
         "org.softwiz.platform.iot.common.lib.exception",
         "org.softwiz.platform.iot.common.lib.advice",
         "org.softwiz.platform.iot.common.lib.mybatis"
+        // email 패키지는 ComponentScan에서 제외 (아래 inner class에서 조건부 등록)
 })
 @EnableConfigurationProperties
 public class CommonLibAutoConfiguration {
@@ -110,17 +128,19 @@ public class CommonLibAutoConfiguration {
         log.info("  - GlobalExceptionHandler");
         log.info("✓ Security Components:");
         log.info("  - CryptoUtil (AES-256)");
-        log.info("  - JwtUtil (JWT)");
+        log.info("  - JwtUtil (JWT) - jwt.enabled=true 시");
         log.info("  - GatewaySignatureValidator");
         log.info("✓ Utility Components:");
         log.info("  - MaskingUtil (Log Masking)");
         log.info("  - ClientIpExtractor");
         log.info("  - DeviceDetector");
         log.info("  - ValidationUtil");
+        log.info("✓ Optional Components:");
+        log.info("  - EmailSender - email.enabled=true 시");
         log.info("========================================");
         log.info("⚠️  Required Configuration:");
         log.info("   crypto.secret-key, crypto.iv");
-        log.info("   jwt.secret, jwt.expiration");
+        log.info("   jwt.secret (jwt.enabled=true 시)");
         log.info("   gateway.signature.secret");
         log.info("   security.publicPaths");
         log.info("========================================");
@@ -128,8 +148,6 @@ public class CommonLibAutoConfiguration {
 
     /**
      * 타임존 초기화
-     * - JVM 기본 타임존을 Asia/Seoul로 설정
-     * - 모든 날짜/시간 처리에 일관된 타임존 적용
      */
     private void initializeTimeZone() {
         TimeZone seoulTimeZone = TimeZone.getTimeZone("Asia/Seoul");
@@ -143,9 +161,6 @@ public class CommonLibAutoConfiguration {
         log.info("========================================");
     }
 
-    /**
-     * UTC 오프셋 문자열 생성 (예: +09:00)
-     */
     private String getOffsetString(TimeZone timeZone) {
         int offsetMillis = timeZone.getRawOffset();
         int hours = offsetMillis / (1000 * 60 * 60);
@@ -153,13 +168,49 @@ public class CommonLibAutoConfiguration {
         return String.format("%+03d:%02d", hours, minutes);
     }
 
-    /**
-     * 개발 환경 체크 (선택적)
-     * 개발 환경에서 설정 누락 시 경고 로그 출력
-     */
     @PostConstruct
     public void validateConfiguration() {
-        // 여기서는 로그만 출력하고, 실제 검증은 각 컴포넌트의 생성자에서 수행
-        // (CryptoUtil, JwtUtil 등은 @Value로 받아서 자동 검증됨)
+        // 실제 검증은 각 컴포넌트의 생성자에서 수행
+    }
+
+    // ========================================
+    // Email Configuration (조건부 로드)
+    // ========================================
+
+    /**
+     * 이메일 설정 (조건부)
+     *
+     * <p>다음 조건을 모두 만족할 때만 EmailSender Bean이 생성됩니다:</p>
+     * <ul>
+     *   <li>JavaMailSender 클래스가 classpath에 존재 (spring-boot-starter-mail 의존성)</li>
+     *   <li>email.enabled=true (application.yml)</li>
+     * </ul>
+     *
+     * <p>mail 의존성이 없거나 email.enabled 설정이 없으면
+     * 이 Configuration 자체가 로드되지 않아 오류가 발생하지 않습니다.</p>
+     */
+    @Configuration
+    @ConditionalOnClass(name = "org.springframework.mail.javamail.JavaMailSender")
+    @ConditionalOnProperty(
+            prefix = "email",
+            name = "enabled",
+            havingValue = "true",
+            matchIfMissing = false
+    )
+    @EnableConfigurationProperties(org.softwiz.platform.iot.common.lib.email.EmailProperties.class)
+    static class EmailConfiguration {
+
+        @Bean
+        public org.softwiz.platform.iot.common.lib.email.EmailSender emailSender(
+                org.softwiz.platform.iot.common.lib.email.EmailProperties emailProperties) {
+            log.info("========================================");
+            log.info("✅ EmailSender Bean 생성");
+            log.info("   email.enabled: true");
+            log.info("   smtp.host: {}", emailProperties.getSmtp().getHost());
+            log.info("   smtp.port: {}", emailProperties.getSmtp().getPort());
+            log.info("   default-sender: {}", emailProperties.getDefaultSender());
+            log.info("========================================");
+            return new org.softwiz.platform.iot.common.lib.email.EmailSender(emailProperties);
+        }
     }
 }
