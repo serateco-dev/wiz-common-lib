@@ -1,7 +1,9 @@
 package org.softwiz.platform.iot.common.lib.config;
 
 import lombok.extern.slf4j.Slf4j;
+import org.softwiz.platform.iot.common.lib.email.EmailSender;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -174,8 +176,8 @@ public class CommonLibAutoConfiguration {
     }
 
     // ========================================
-    // Email Configuration (조건부 로드)
-    // ========================================
+// Email Configuration (조건부 로드)
+// ========================================
 
     /**
      * 이메일 설정 (조건부)
@@ -184,10 +186,10 @@ public class CommonLibAutoConfiguration {
      * <ul>
      *   <li>JavaMailSender 클래스가 classpath에 존재 (spring-boot-starter-mail 의존성)</li>
      *   <li>email.enabled=true (application.yml)</li>
+     *   <li>EmailSender Bean이 다른 곳에서 정의되지 않음</li>
      * </ul>
      *
-     * <p>mail 의존성이 없거나 email.enabled 설정이 없으면
-     * 이 Configuration 자체가 로드되지 않아 오류가 발생하지 않습니다.</p>
+     * <p>서비스에서 직접 EmailSender Bean을 정의하면 이 자동 설정은 무시됩니다.</p>
      */
     @Configuration
     @ConditionalOnClass(name = "org.springframework.mail.javamail.JavaMailSender")
@@ -201,10 +203,11 @@ public class CommonLibAutoConfiguration {
     static class EmailConfiguration {
 
         @Bean
+        @ConditionalOnMissingBean(org.softwiz.platform.iot.common.lib.email.EmailSender.class)
         public org.softwiz.platform.iot.common.lib.email.EmailSender emailSender(
                 org.softwiz.platform.iot.common.lib.email.EmailProperties emailProperties) {
             log.info("========================================");
-            log.info("✅ EmailSender Bean 생성");
+            log.info("✅ EmailSender Bean 생성 (common-lib auto)");
             log.info("   email.enabled: true");
             log.info("   smtp.host: {}", emailProperties.getSmtp().getHost());
             log.info("   smtp.port: {}", emailProperties.getSmtp().getPort());
