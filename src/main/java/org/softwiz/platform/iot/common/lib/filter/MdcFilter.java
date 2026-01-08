@@ -83,8 +83,8 @@ public class MdcFilter implements Filter {
         if (requestId == null || requestId.isEmpty()) {
             requestId = generateShortUuid();
 
-            // actuator, health check는 debug로
-            if (uri.startsWith("/actuator") || uri.equals("/health")) {
+           
+            if (uri.contains("/actuator") || uri.contains("/health") || uri.equals("/favicon.ico")) {
                 log.debug("Generated Request ID for internal call: {} - {}", requestId, uri);
             } else {
                 log.warn("X-Request-Id missing: {} - {} (Direct call?)", requestId, uri);
