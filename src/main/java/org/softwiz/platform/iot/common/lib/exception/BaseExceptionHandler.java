@@ -1,10 +1,13 @@
 package org.softwiz.platform.iot.common.lib.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.mybatis.spring.MyBatisSystemException;
 import org.slf4j.MDC;
 import org.softwiz.platform.iot.common.lib.dto.ErrorResponse;
+import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -18,14 +21,97 @@ import java.util.stream.Collectors;
  * 각 서비스에서 상속받아 사용
  * 공통 로직 제공 + 확장 가능
  *
- * JDBC/MyBatis 관련 예외는 JdbcExceptionHandler에서 별도 처리
- * (spring-jdbc가 없는 서비스에서도 사용 가능하도록 분리)
+ * DB 관련 예외 핸들러 포함
  */
 @Slf4j
 public abstract class BaseExceptionHandler {
 
     /**
-     * Validation 예외 (공통)
+     * DB 연결 실패 처리 (503 Service Unavailable)
+     * - CannotGetJdbcConnectionException
+     * - Connection Pool exhausted
+     * - DB 서버 다운 등
+     */
+    @ExceptionHandler(CannotGetJdbcConnectionException.class)
+    public ResponseEntity<ErrorResponse> handleDatabaseConnectionException(
+            CannotGetJdbcConnectionException ex,
+            WebRequest request) {
+
+        String path = extractPath(request);
+        log.error("Database connection failed: {}", path);
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ErrorResponse.builder()
+                        .requestId(getRequestId())
+                        .code("DATABASE_CONNECTION_ERROR")
+                        .message("데이터베이스 연결 실패")
+                        .path(path)
+                        .build());
+    }
+
+    /**
+     * MyBatis 시스템 예외 처리
+     * - MyBatisSystemException은 주로 DB 연결 문제를 감싸고 있음
+     * - 내부 원인에 따라 503 또는 500으로 분기
+     */
+    @ExceptionHandler(MyBatisSystemException.class)
+    public ResponseEntity<ErrorResponse> handleMyBatisSystemException(
+            MyBatisSystemException ex,
+            WebRequest request) {
+
+        String path = extractPath(request);
+
+        // 내부 원인이 DB 연결 문제인지 확인
+        Throwable cause = ex.getCause();
+        if (cause instanceof CannotGetJdbcConnectionException) {
+            log.error("MyBatis DB connection failed: {}", path);
+
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(ErrorResponse.builder()
+                            .requestId(getRequestId())
+                            .code("DATABASE_CONNECTION_ERROR")
+                            .message("데이터베이스 연결 실패")
+                            .path(path)
+                            .build());
+        }
+
+        // 그 외 MyBatis 시스템 에러
+        log.error("MyBatis system error: {}", path);
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.builder()
+                        .requestId(getRequestId())
+                        .code("MYBATIS_SYSTEM_ERROR")
+                        .message("데이터베이스 처리 중 오류")
+                        .path(path)
+                        .build());
+    }
+
+    /**
+     * 일반 DB 접근 예외 처리 (500 Internal Server Error)
+     * - DataIntegrityViolation (외래키, 유니크 제약 위반 등)
+     * - DataAccessResourceFailure
+     * - 기타 Spring DataAccessException
+     */
+    @ExceptionHandler(DataAccessException.class)
+    public ResponseEntity<ErrorResponse> handleDataAccessException(
+            DataAccessException ex,
+            WebRequest request) {
+
+        String path = extractPath(request);
+        log.error("Data access error: {}", path);
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.builder()
+                        .requestId(getRequestId())
+                        .code("DATABASE_ERROR")
+                        .message("데이터베이스 작업 중 오류")
+                        .path(path)
+                        .build());
+    }
+
+    /**
+     * Validation 예외 처리 (400 Bad Request)
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(
@@ -37,19 +123,19 @@ public abstract class BaseExceptionHandler {
                 .collect(Collectors.joining(", "));
 
         String path = extractPath(request);
-        log.warn("Validation failed: {} - {}", path, errors);
+        log.warn("Validation failed: {}", path);
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.builder()
                         .requestId(getRequestId())
-                        .code("Bad Request")
-                        .message("잘못된 요청, 필수 파라미터 없음, 포맷 오류")
+                        .code("BAD_REQUEST")
+                        .message("잘못된 요청")
                         .path(path)
                         .build());
     }
 
     /**
-     * 401 Unauthorized (공통)
+     * 401 Unauthorized 처리
      */
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> handleUnauthorizedException(
@@ -57,22 +143,20 @@ public abstract class BaseExceptionHandler {
             WebRequest request) {
 
         String path = extractPath(request);
-        log.warn("Unauthorized access: {} - {}", path, ex.getMessage());
+        log.warn("Unauthorized access: {}", path);
 
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(ErrorResponse.builder()
                         .requestId(getRequestId())
-                        .code("Unauthorized")
+                        .code("UNAUTHORIZED")
                         .message(ex.getMessage())
                         .path(path)
                         .build());
     }
 
     /**
-     * 비즈니스 예외 (공통)
-     *
+     * 비즈니스 예외 처리
      * BusinessException에서 제공하는 HttpStatus 사용
-     * 기본값은 500, 필요시 예외 생성 시 HttpStatus 지정 가능
      */
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ErrorResponse> handleBusinessException(
@@ -83,11 +167,9 @@ public abstract class BaseExceptionHandler {
         String path = extractPath(request);
 
         if (status.is4xxClientError()) {
-            log.warn("Business error: {} - {} (Code: {}, Status: {})",
-                    path, ex.getMessage(), ex.getCode(), status.value());
+            log.warn("Business error: {} - Code: {}", path, ex.getCode());
         } else {
-            log.error("Business error: {} - {} (Code: {}, Status: {})",
-                    path, ex.getMessage(), ex.getCode(), status.value(), ex);
+            log.error("Business error: {} - Code: {}", path, ex.getCode());
         }
 
         return ResponseEntity.status(status)
@@ -100,7 +182,8 @@ public abstract class BaseExceptionHandler {
     }
 
     /**
-     * 일반 예외 (공통)
+     * 일반 예외 처리
+     * 다른 핸들러가 먼저 처리하도록 마지막 순서로 배치
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(
@@ -108,7 +191,7 @@ public abstract class BaseExceptionHandler {
             WebRequest request) {
 
         String path = extractPath(request);
-        log.error("Unexpected error: {} - {}", path, ex.getMessage(), ex);
+        log.error("Unexpected error: {}", path);
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.builder()
@@ -119,12 +202,17 @@ public abstract class BaseExceptionHandler {
                         .build());
     }
 
-    // 유틸리티 메서드
+    /**
+     * 유틸리티: Request ID 추출
+     */
     protected String getRequestId() {
         String requestId = MDC.get("requestId");
         return requestId != null ? requestId : "NO_ID";
     }
 
+    /**
+     * 유틸리티: Request Path 추출
+     */
     protected String extractPath(WebRequest request) {
         String description = request.getDescription(false);
         if (description.startsWith("uri=")) {
