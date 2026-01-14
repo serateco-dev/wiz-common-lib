@@ -1,6 +1,5 @@
 package org.softwiz.platform.iot.common.lib.util;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.softwiz.platform.iot.common.lib.dto.ApiResponse;
 import org.softwiz.platform.iot.common.lib.dto.ErrorResponse;
@@ -46,7 +45,6 @@ public class EmailClient {
     private final RestTemplate restTemplate;
     private final String baseUrl;
     private final GatewaySignatureValidator signatureValidator;
-    private final ObjectMapper objectMapper;
 
     private static final String EMAIL_SEND_PATH = "/api/v2/email/send";
     private static final String EMAIL_TEMPLATE_SEND_PATH = "/api/v2/email/template/send";
@@ -63,7 +61,6 @@ public class EmailClient {
         this.restTemplate = restTemplate;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.signatureValidator = signatureValidator;
-        this.objectMapper = new ObjectMapper();
     }
 
     /**
@@ -113,7 +110,7 @@ public class EmailClient {
                     ApiResponse.class
             );
 
-            // ✅ 2xx 성공 응답 처리
+            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -131,47 +128,27 @@ public class EmailClient {
                 return EmailResult.success(emailId, status, body.getMessage());
             }
 
-            // ❌ 2xx가 아닌 응답
-            return EmailResult.failure(
-                    "EMAIL_SEND_FAILED",
-                    "이메일 서버 응답 오류: " + response.getStatusCode()
-            );
+            return EmailResult.failure("EMAIL_SEND_FAILED", "Unexpected response: " + response.getStatusCode());
 
-        } catch (HttpClientErrorException ex) {
-            // ✅ 4xx 클라이언트 에러 처리
-            log.warn("이메일 발송 클라이언트 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpClientError(ex, "이메일 발송");
-
-        } catch (HttpServerErrorException ex) {
-            // ✅ 5xx 서버 에러 처리
-            log.error("이메일 발송 서버 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpServerError(ex, "이메일 발송");
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            // 4xx, 5xx 에러 처리
+            log.error("이메일 발송 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpError(ex, "이메일 발송");
 
         } catch (ResourceAccessException ex) {
-            // ✅ 네트워크 타임아웃, 연결 실패
+            // 네트워크 타임아웃, 연결 실패
             log.error("이메일 서버 연결 실패 - url: {}", url, ex);
-            return EmailResult.failure(
-                    "EMAIL_SERVICE_UNAVAILABLE",
-                    "이메일 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
-            );
+            return EmailResult.failure("EMAIL_SERVICE_UNAVAILABLE", "이메일 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // ✅ 기타 RestClient 예외
+            // 기타 RestClient 예외
             log.error("이메일 발송 중 RestClient 예외 - url: {}", url, ex);
-            return EmailResult.failure(
-                    "EMAIL_SEND_ERROR",
-                    "이메일 발송 중 통신 오류가 발생했습니다: " + ex.getMessage()
-            );
+            return EmailResult.failure("EMAIL_SEND_ERROR", "이메일 발송 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // ✅ 예상치 못한 예외
-            log.error("이메일 발송 중 예상치 못한 예외 발생 - url: {}", url, ex);
-            return EmailResult.failure(
-                    "EMAIL_SEND_ERROR",
-                    "이메일 발송 중 오류가 발생했습니다"
-            );
+            // 예상치 못한 예외
+            log.error("이메일 발송 중 예상치 못한 예외 - url: {}", url, ex);
+            return EmailResult.failure("EMAIL_SEND_ERROR", "이메일 발송 중 오류가 발생했습니다.");
         }
     }
 
@@ -210,7 +187,7 @@ public class EmailClient {
                     ApiResponse.class
             );
 
-            // ✅ 2xx 성공 응답 처리
+            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -228,47 +205,27 @@ public class EmailClient {
                 return EmailResult.success(emailId, status, body.getMessage());
             }
 
-            // ❌ 2xx가 아닌 응답
-            return EmailResult.failure(
-                    "TEMPLATE_EMAIL_SEND_FAILED",
-                    "이메일 서버 응답 오류: " + response.getStatusCode()
-            );
+            return EmailResult.failure("TEMPLATE_EMAIL_SEND_FAILED", "Unexpected response: " + response.getStatusCode());
 
-        } catch (HttpClientErrorException ex) {
-            // ✅ 4xx 클라이언트 에러 처리
-            log.warn("템플릿 이메일 발송 클라이언트 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpClientError(ex, "템플릿 이메일 발송");
-
-        } catch (HttpServerErrorException ex) {
-            // ✅ 5xx 서버 에러 처리
-            log.error("템플릿 이메일 발송 서버 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpServerError(ex, "템플릿 이메일 발송");
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            // 4xx, 5xx 에러 처리
+            log.error("템플릿 이메일 발송 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpError(ex, "템플릿 이메일 발송");
 
         } catch (ResourceAccessException ex) {
-            // ✅ 네트워크 타임아웃, 연결 실패
+            // 네트워크 타임아웃, 연결 실패
             log.error("이메일 서버 연결 실패 - url: {}", url, ex);
-            return EmailResult.failure(
-                    "EMAIL_SERVICE_UNAVAILABLE",
-                    "이메일 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
-            );
+            return EmailResult.failure("EMAIL_SERVICE_UNAVAILABLE", "이메일 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // ✅ 기타 RestClient 예외
+            // 기타 RestClient 예외
             log.error("템플릿 이메일 발송 중 RestClient 예외 - url: {}", url, ex);
-            return EmailResult.failure(
-                    "TEMPLATE_EMAIL_SEND_ERROR",
-                    "템플릿 이메일 발송 중 통신 오류가 발생했습니다: " + ex.getMessage()
-            );
+            return EmailResult.failure("TEMPLATE_EMAIL_SEND_ERROR", "템플릿 이메일 발송 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // ✅ 예상치 못한 예외
-            log.error("템플릿 이메일 발송 중 예상치 못한 예외 발생 - url: {}", url, ex);
-            return EmailResult.failure(
-                    "TEMPLATE_EMAIL_SEND_ERROR",
-                    "템플릿 이메일 발송 중 오류가 발생했습니다"
-            );
+            // 예상치 못한 예외
+            log.error("템플릿 이메일 발송 중 예상치 못한 예외 - url: {}", url, ex);
+            return EmailResult.failure("TEMPLATE_EMAIL_SEND_ERROR", "템플릿 이메일 발송 중 오류가 발생했습니다.");
         }
     }
 
@@ -307,7 +264,7 @@ public class EmailClient {
                     ApiResponse.class
             );
 
-            // ✅ 2xx 성공 응답 처리
+            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -323,53 +280,31 @@ public class EmailClient {
                     String recipient = (String) dataMap.get("recipient");
                     String verifyPurpose = (String) dataMap.get("verifyPurpose");
 
-                    return VerifyEmailResult.success(
-                            verifyId, emailId, recipient, verifyPurpose, body.getMessage()
-                    );
+                    return VerifyEmailResult.success(verifyId, emailId, recipient, verifyPurpose, body.getMessage());
                 }
             }
 
-            // ❌ 2xx가 아닌 응답
-            return VerifyEmailResult.failure(
-                    "VERIFY_EMAIL_SEND_FAILED",
-                    "이메일 서버 응답 오류: " + response.getStatusCode()
-            );
+            return VerifyEmailResult.failure("VERIFY_EMAIL_SEND_FAILED", "Unexpected response: " + response.getStatusCode());
 
-        } catch (HttpClientErrorException ex) {
-            // ✅ 4xx 클라이언트 에러 처리
-            log.warn("인증 이메일 발송 클라이언트 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpClientErrorForVerify(ex, "인증 이메일 발송");
-
-        } catch (HttpServerErrorException ex) {
-            // ✅ 5xx 서버 에러 처리
-            log.error("인증 이메일 발송 서버 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpServerErrorForVerify(ex, "인증 이메일 발송");
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            // 4xx, 5xx 에러 처리
+            log.error("인증 이메일 발송 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpErrorForVerify(ex, "인증 이메일 발송");
 
         } catch (ResourceAccessException ex) {
-            // ✅ 네트워크 타임아웃, 연결 실패
+            // 네트워크 타임아웃, 연결 실패
             log.error("이메일 서버 연결 실패 - url: {}", url, ex);
-            return VerifyEmailResult.failure(
-                    "EMAIL_SERVICE_UNAVAILABLE",
-                    "이메일 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
-            );
+            return VerifyEmailResult.failure("EMAIL_SERVICE_UNAVAILABLE", "이메일 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // ✅ 기타 RestClient 예외
+            // 기타 RestClient 예외
             log.error("인증 이메일 발송 중 RestClient 예외 - url: {}", url, ex);
-            return VerifyEmailResult.failure(
-                    "VERIFY_EMAIL_SEND_ERROR",
-                    "인증 이메일 발송 중 통신 오류가 발생했습니다: " + ex.getMessage()
-            );
+            return VerifyEmailResult.failure("VERIFY_EMAIL_SEND_ERROR", "인증 이메일 발송 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // ✅ 예상치 못한 예외
-            log.error("인증 이메일 발송 중 예상치 못한 예외 발생 - url: {}", url, ex);
-            return VerifyEmailResult.failure(
-                    "VERIFY_EMAIL_SEND_ERROR",
-                    "인증 이메일 발송 중 오류가 발생했습니다"
-            );
+            // 예상치 못한 예외
+            log.error("인증 이메일 발송 중 예상치 못한 예외 - url: {}", url, ex);
+            return VerifyEmailResult.failure("VERIFY_EMAIL_SEND_ERROR", "인증 이메일 발송 중 오류가 발생했습니다.");
         }
     }
 
@@ -378,82 +313,48 @@ public class EmailClient {
     // ========================================
 
     /**
-     * HTTP 4xx 클라이언트 에러 처리 (일반 이메일용)
+     * HTTP 에러 처리 (일반 이메일용)
+     * 4xx, 5xx 에러를 통합 처리
      */
-    private EmailResult handleHttpClientError(HttpClientErrorException ex, String operation) {
+    private EmailResult handleHttpError(Exception ex, String operation) {
+        String responseBody = "";
+        if (ex instanceof HttpClientErrorException) {
+            responseBody = ((HttpClientErrorException) ex).getResponseBodyAsString();
+        } else if (ex instanceof HttpServerErrorException) {
+            responseBody = ((HttpServerErrorException) ex).getResponseBodyAsString();
+        }
+
         try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            ErrorResponse errorResponse = parseErrorResponse(responseBody);
             String code = errorResponse.getCode() != null ? errorResponse.getCode() : "EMAIL_SEND_FAILED";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 실패: " + ex.getStatusCode();
-
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() : operation + " 실패";
             return EmailResult.failure(code, message);
         } catch (Exception parseEx) {
             log.warn("에러 응답 파싱 실패", parseEx);
-            return EmailResult.failure(
-                    "EMAIL_SEND_FAILED",
-                    operation + " 실패: " + ex.getStatusCode()
-            );
+            return EmailResult.failure("EMAIL_SEND_FAILED", operation + " 실패");
         }
     }
 
     /**
-     * HTTP 5xx 서버 에러 처리 (일반 이메일용)
+     * HTTP 에러 처리 (인증 이메일용)
+     * 4xx, 5xx 에러를 통합 처리
      */
-    private EmailResult handleHttpServerError(HttpServerErrorException ex, String operation) {
-        try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
-            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "EMAIL_SEND_ERROR";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode();
-
-            return EmailResult.failure(code, message);
-        } catch (Exception parseEx) {
-            log.warn("에러 응답 파싱 실패", parseEx);
-            return EmailResult.failure(
-                    "EMAIL_SEND_ERROR",
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode()
-            );
+    private VerifyEmailResult handleHttpErrorForVerify(Exception ex, String operation) {
+        String responseBody = "";
+        if (ex instanceof HttpClientErrorException) {
+            responseBody = ((HttpClientErrorException) ex).getResponseBodyAsString();
+        } else if (ex instanceof HttpServerErrorException) {
+            responseBody = ((HttpServerErrorException) ex).getResponseBodyAsString();
         }
-    }
 
-    /**
-     * HTTP 4xx 클라이언트 에러 처리 (인증 이메일용)
-     */
-    private VerifyEmailResult handleHttpClientErrorForVerify(HttpClientErrorException ex, String operation) {
         try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            ErrorResponse errorResponse = parseErrorResponse(responseBody);
             String code = errorResponse.getCode() != null ? errorResponse.getCode() : "VERIFY_EMAIL_SEND_FAILED";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 실패: " + ex.getStatusCode();
-
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() : operation + " 실패";
             return VerifyEmailResult.failure(code, message);
         } catch (Exception parseEx) {
             log.warn("에러 응답 파싱 실패", parseEx);
-            return VerifyEmailResult.failure(
-                    "VERIFY_EMAIL_SEND_FAILED",
-                    operation + " 실패: " + ex.getStatusCode()
-            );
-        }
-    }
-
-    /**
-     * HTTP 5xx 서버 에러 처리 (인증 이메일용)
-     */
-    private VerifyEmailResult handleHttpServerErrorForVerify(HttpServerErrorException ex, String operation) {
-        try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
-            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "VERIFY_EMAIL_SEND_ERROR";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode();
-
-            return VerifyEmailResult.failure(code, message);
-        } catch (Exception parseEx) {
-            log.warn("에러 응답 파싱 실패", parseEx);
-            return VerifyEmailResult.failure(
-                    "VERIFY_EMAIL_SEND_ERROR",
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode()
-            );
+            return VerifyEmailResult.failure("VERIFY_EMAIL_SEND_FAILED", operation + " 실패");
         }
     }
 
@@ -462,7 +363,7 @@ public class EmailClient {
      */
     private ErrorResponse parseErrorResponse(String responseBody) {
         try {
-            return objectMapper.readValue(responseBody, ErrorResponse.class);
+            return JsonUtil.fromJson(responseBody, ErrorResponse.class);
         } catch (Exception e) {
             log.debug("ErrorResponse 파싱 실패, 원본 응답: {}", responseBody);
             // 파싱 실패 시 기본 에러 응답 반환
@@ -492,12 +393,12 @@ public class EmailClient {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // ✅ 내부 서비스 간 통신은 항상 새로운 서명 생성
+        // 내부 서비스 간 통신은 항상 새로운 서명 생성
         if (signatureValidator != null) {
             try {
                 String timestamp = signatureValidator.generateTimestamp();
 
-                // ✅ 실제 호출할 method와 uri로 서명 생성 (다른 서비스의 헤더를 복사하지 않음!)
+                // 실제 호출할 method와 uri로 서명 생성 (다른 서비스의 헤더를 복사하지 않음!)
                 String signature = signatureValidator.generateSignature(method, uri, timestamp);
 
                 headers.set("X-Gateway-Signature", signature);

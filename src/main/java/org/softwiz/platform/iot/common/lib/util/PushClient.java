@@ -1,6 +1,5 @@
 package org.softwiz.platform.iot.common.lib.util;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.softwiz.platform.iot.common.lib.dto.ApiResponse;
 import org.softwiz.platform.iot.common.lib.dto.ErrorResponse;
@@ -50,7 +49,6 @@ public class PushClient {
     private final RestTemplate restTemplate;
     private final String baseUrl;
     private final GatewaySignatureValidator signatureValidator;
-    private final ObjectMapper objectMapper;
 
     private static final String PUSH_SEND_PATH = "/api/v2/push/send";
     private static final String TOKEN_SAVE_PATH = "/api/v2/push/token/save";
@@ -67,7 +65,6 @@ public class PushClient {
         this.restTemplate = restTemplate;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.signatureValidator = signatureValidator;
-        this.objectMapper = new ObjectMapper();
     }
 
     /**
@@ -117,7 +114,7 @@ public class PushClient {
                     ApiResponse.class
             );
 
-            // ✅ 2xx 성공 응답 처리
+            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -135,47 +132,27 @@ public class PushClient {
                 return PushResult.success(pushId, status, body.getMessage());
             }
 
-            // ❌ 2xx가 아닌 응답
-            return PushResult.failure(
-                    "PUSH_SEND_FAILED",
-                    "푸시 서버 응답 오류: " + response.getStatusCode()
-            );
+            return PushResult.failure("PUSH_SEND_FAILED", "Unexpected response: " + response.getStatusCode());
 
-        } catch (HttpClientErrorException ex) {
-            // ✅ 4xx 클라이언트 에러 처리
-            log.warn("푸시 발송 클라이언트 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpClientError(ex, "푸시 발송");
-
-        } catch (HttpServerErrorException ex) {
-            // ✅ 5xx 서버 에러 처리
-            log.error("푸시 발송 서버 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpServerError(ex, "푸시 발송");
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            // 4xx, 5xx 에러 처리
+            log.error("푸시 발송 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpError(ex, "푸시 발송");
 
         } catch (ResourceAccessException ex) {
-            // ✅ 네트워크 타임아웃, 연결 실패
+            // 네트워크 타임아웃, 연결 실패
             log.error("푸시 서버 연결 실패 - url: {}", url, ex);
-            return PushResult.failure(
-                    "PUSH_SERVICE_UNAVAILABLE",
-                    "푸시 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
-            );
+            return PushResult.failure("PUSH_SERVICE_UNAVAILABLE", "푸시 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // ✅ 기타 RestClient 예외
+            // 기타 RestClient 예외
             log.error("푸시 발송 중 RestClient 예외 - url: {}", url, ex);
-            return PushResult.failure(
-                    "PUSH_SEND_ERROR",
-                    "푸시 발송 중 통신 오류가 발생했습니다: " + ex.getMessage()
-            );
+            return PushResult.failure("PUSH_SEND_ERROR", "푸시 발송 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // ✅ 예상치 못한 예외
-            log.error("푸시 발송 중 예상치 못한 예외 발생 - url: {}", url, ex);
-            return PushResult.failure(
-                    "PUSH_SEND_ERROR",
-                    "푸시 발송 중 오류가 발생했습니다"
-            );
+            // 예상치 못한 예외
+            log.error("푸시 발송 중 예상치 못한 예외 - url: {}", url, ex);
+            return PushResult.failure("PUSH_SEND_ERROR", "푸시 발송 중 오류가 발생했습니다.");
         }
     }
 
@@ -214,7 +191,7 @@ public class PushClient {
                     ApiResponse.class
             );
 
-            // ✅ 2xx 성공 응답 처리
+            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -259,47 +236,27 @@ public class PushClient {
                 );
             }
 
-            // ❌ 2xx가 아닌 응답
-            return TemplatePushResult.failure(
-                    "TEMPLATE_PUSH_SEND_FAILED",
-                    "푸시 서버 응답 오류: " + response.getStatusCode()
-            );
+            return TemplatePushResult.failure("TEMPLATE_PUSH_SEND_FAILED", "Unexpected response: " + response.getStatusCode());
 
-        } catch (HttpClientErrorException ex) {
-            // ✅ 4xx 클라이언트 에러 처리
-            log.warn("템플릿 푸시 발송 클라이언트 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpClientErrorForTemplate(ex, "템플릿 푸시 발송");
-
-        } catch (HttpServerErrorException ex) {
-            // ✅ 5xx 서버 에러 처리
-            log.error("템플릿 푸시 발송 서버 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpServerErrorForTemplate(ex, "템플릿 푸시 발송");
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            // 4xx, 5xx 에러 처리
+            log.error("템플릿 푸시 발송 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpErrorForTemplate(ex, "템플릿 푸시 발송");
 
         } catch (ResourceAccessException ex) {
-            // ✅ 네트워크 타임아웃, 연결 실패
+            // 네트워크 타임아웃, 연결 실패
             log.error("푸시 서버 연결 실패 - url: {}", url, ex);
-            return TemplatePushResult.failure(
-                    "PUSH_SERVICE_UNAVAILABLE",
-                    "푸시 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
-            );
+            return TemplatePushResult.failure("PUSH_SERVICE_UNAVAILABLE", "푸시 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // ✅ 기타 RestClient 예외
+            // 기타 RestClient 예외
             log.error("템플릿 푸시 발송 중 RestClient 예외 - url: {}", url, ex);
-            return TemplatePushResult.failure(
-                    "TEMPLATE_PUSH_SEND_ERROR",
-                    "템플릿 푸시 발송 중 통신 오류가 발생했습니다: " + ex.getMessage()
-            );
+            return TemplatePushResult.failure("TEMPLATE_PUSH_SEND_ERROR", "템플릿 푸시 발송 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // ✅ 예상치 못한 예외
-            log.error("템플릿 푸시 발송 중 예상치 못한 예외 발생 - url: {}", url, ex);
-            return TemplatePushResult.failure(
-                    "TEMPLATE_PUSH_SEND_ERROR",
-                    "템플릿 푸시 발송 중 오류가 발생했습니다"
-            );
+            // 예상치 못한 예외
+            log.error("템플릿 푸시 발송 중 예상치 못한 예외 - url: {}", url, ex);
+            return TemplatePushResult.failure("TEMPLATE_PUSH_SEND_ERROR", "템플릿 푸시 발송 중 오류가 발생했습니다.");
         }
     }
 
@@ -372,52 +329,32 @@ public class PushClient {
                     ApiResponse.class
             );
 
-            // ✅ 2xx 성공 응답 처리
+            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful()) {
                 return TokenSaveResult.success("토큰이 성공적으로 저장되었습니다");
             }
 
-            // ❌ 2xx가 아닌 응답
-            return TokenSaveResult.failure(
-                    "TOKEN_SAVE_FAILED",
-                    "푸시 서버 응답 오류: " + response.getStatusCode()
-            );
+            return TokenSaveResult.failure("TOKEN_SAVE_FAILED", "Unexpected response: " + response.getStatusCode());
 
-        } catch (HttpClientErrorException ex) {
-            // ✅ 4xx 클라이언트 에러 처리
-            log.warn("토큰 저장 클라이언트 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpClientErrorForToken(ex, "토큰 저장");
-
-        } catch (HttpServerErrorException ex) {
-            // ✅ 5xx 서버 에러 처리
-            log.error("토큰 저장 서버 오류 - Status: {}, Body: {}",
-                    ex.getStatusCode(), ex.getResponseBodyAsString());
-            return handleHttpServerErrorForToken(ex, "토큰 저장");
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            // 4xx, 5xx 에러 처리
+            log.error("토큰 저장 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpErrorForToken(ex, "토큰 저장");
 
         } catch (ResourceAccessException ex) {
-            // ✅ 네트워크 타임아웃, 연결 실패
+            // 네트워크 타임아웃, 연결 실패
             log.error("푸시 서버 연결 실패 - url: {}", url, ex);
-            return TokenSaveResult.failure(
-                    "PUSH_SERVICE_UNAVAILABLE",
-                    "푸시 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
-            );
+            return TokenSaveResult.failure("PUSH_SERVICE_UNAVAILABLE", "푸시 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // ✅ 기타 RestClient 예외
+            // 기타 RestClient 예외
             log.error("토큰 저장 중 RestClient 예외 - url: {}", url, ex);
-            return TokenSaveResult.failure(
-                    "TOKEN_SAVE_ERROR",
-                    "토큰 저장 중 통신 오류가 발생했습니다: " + ex.getMessage()
-            );
+            return TokenSaveResult.failure("TOKEN_SAVE_ERROR", "토큰 저장 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // ✅ 예상치 못한 예외
-            log.error("토큰 저장 중 예상치 못한 예외 발생 - url: {}", url, ex);
-            return TokenSaveResult.failure(
-                    "TOKEN_SAVE_ERROR",
-                    "토큰 저장 중 오류가 발생했습니다"
-            );
+            // 예상치 못한 예외
+            log.error("토큰 저장 중 예상치 못한 예외 - url: {}", url, ex);
+            return TokenSaveResult.failure("TOKEN_SAVE_ERROR", "토큰 저장 중 오류가 발생했습니다.");
         }
     }
 
@@ -426,122 +363,71 @@ public class PushClient {
     // ========================================
 
     /**
-     * HTTP 4xx 클라이언트 에러 처리 (일반 푸시용)
+     * HTTP 에러 처리 (일반 푸시용)
+     * 4xx, 5xx 에러를 통합 처리
      */
-    private PushResult handleHttpClientError(HttpClientErrorException ex, String operation) {
+    private PushResult handleHttpError(Exception ex, String operation) {
+        String responseBody = "";
+        if (ex instanceof HttpClientErrorException) {
+            responseBody = ((HttpClientErrorException) ex).getResponseBodyAsString();
+        } else if (ex instanceof HttpServerErrorException) {
+            responseBody = ((HttpServerErrorException) ex).getResponseBodyAsString();
+        }
+
         try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            ErrorResponse errorResponse = parseErrorResponse(responseBody);
             String code = errorResponse.getCode() != null ? errorResponse.getCode() : "PUSH_SEND_FAILED";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 실패: " + ex.getStatusCode();
-
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() : operation + " 실패";
             return PushResult.failure(code, message);
         } catch (Exception parseEx) {
             log.warn("에러 응답 파싱 실패", parseEx);
-            return PushResult.failure(
-                    "PUSH_SEND_FAILED",
-                    operation + " 실패: " + ex.getStatusCode()
-            );
+            return PushResult.failure("PUSH_SEND_FAILED", operation + " 실패");
         }
     }
 
     /**
-     * HTTP 5xx 서버 에러 처리 (일반 푸시용)
+     * HTTP 에러 처리 (템플릿 푸시용)
+     * 4xx, 5xx 에러를 통합 처리
      */
-    private PushResult handleHttpServerError(HttpServerErrorException ex, String operation) {
-        try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
-            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "PUSH_SEND_ERROR";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode();
-
-            return PushResult.failure(code, message);
-        } catch (Exception parseEx) {
-            log.warn("에러 응답 파싱 실패", parseEx);
-            return PushResult.failure(
-                    "PUSH_SEND_ERROR",
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode()
-            );
+    private TemplatePushResult handleHttpErrorForTemplate(Exception ex, String operation) {
+        String responseBody = "";
+        if (ex instanceof HttpClientErrorException) {
+            responseBody = ((HttpClientErrorException) ex).getResponseBodyAsString();
+        } else if (ex instanceof HttpServerErrorException) {
+            responseBody = ((HttpServerErrorException) ex).getResponseBodyAsString();
         }
-    }
 
-    /**
-     * HTTP 4xx 클라이언트 에러 처리 (템플릿 푸시용)
-     */
-    private TemplatePushResult handleHttpClientErrorForTemplate(HttpClientErrorException ex, String operation) {
         try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            ErrorResponse errorResponse = parseErrorResponse(responseBody);
             String code = errorResponse.getCode() != null ? errorResponse.getCode() : "TEMPLATE_PUSH_SEND_FAILED";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 실패: " + ex.getStatusCode();
-
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() : operation + " 실패";
             return TemplatePushResult.failure(code, message);
         } catch (Exception parseEx) {
             log.warn("에러 응답 파싱 실패", parseEx);
-            return TemplatePushResult.failure(
-                    "TEMPLATE_PUSH_SEND_FAILED",
-                    operation + " 실패: " + ex.getStatusCode()
-            );
+            return TemplatePushResult.failure("TEMPLATE_PUSH_SEND_FAILED", operation + " 실패");
         }
     }
 
     /**
-     * HTTP 5xx 서버 에러 처리 (템플릿 푸시용)
+     * HTTP 에러 처리 (토큰 저장용)
+     * 4xx, 5xx 에러를 통합 처리
      */
-    private TemplatePushResult handleHttpServerErrorForTemplate(HttpServerErrorException ex, String operation) {
-        try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
-            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "TEMPLATE_PUSH_SEND_ERROR";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode();
-
-            return TemplatePushResult.failure(code, message);
-        } catch (Exception parseEx) {
-            log.warn("에러 응답 파싱 실패", parseEx);
-            return TemplatePushResult.failure(
-                    "TEMPLATE_PUSH_SEND_ERROR",
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode()
-            );
+    private TokenSaveResult handleHttpErrorForToken(Exception ex, String operation) {
+        String responseBody = "";
+        if (ex instanceof HttpClientErrorException) {
+            responseBody = ((HttpClientErrorException) ex).getResponseBodyAsString();
+        } else if (ex instanceof HttpServerErrorException) {
+            responseBody = ((HttpServerErrorException) ex).getResponseBodyAsString();
         }
-    }
 
-    /**
-     * HTTP 4xx 클라이언트 에러 처리 (토큰 저장용)
-     */
-    private TokenSaveResult handleHttpClientErrorForToken(HttpClientErrorException ex, String operation) {
         try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            ErrorResponse errorResponse = parseErrorResponse(responseBody);
             String code = errorResponse.getCode() != null ? errorResponse.getCode() : "TOKEN_SAVE_FAILED";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 실패: " + ex.getStatusCode();
-
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() : operation + " 실패";
             return TokenSaveResult.failure(code, message);
         } catch (Exception parseEx) {
             log.warn("에러 응답 파싱 실패", parseEx);
-            return TokenSaveResult.failure(
-                    "TOKEN_SAVE_FAILED",
-                    operation + " 실패: " + ex.getStatusCode()
-            );
-        }
-    }
-
-    /**
-     * HTTP 5xx 서버 에러 처리 (토큰 저장용)
-     */
-    private TokenSaveResult handleHttpServerErrorForToken(HttpServerErrorException ex, String operation) {
-        try {
-            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
-            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "TOKEN_SAVE_ERROR";
-            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode();
-
-            return TokenSaveResult.failure(code, message);
-        } catch (Exception parseEx) {
-            log.warn("에러 응답 파싱 실패", parseEx);
-            return TokenSaveResult.failure(
-                    "TOKEN_SAVE_ERROR",
-                    operation + " 중 서버 오류 발생: " + ex.getStatusCode()
-            );
+            return TokenSaveResult.failure("TOKEN_SAVE_FAILED", operation + " 실패");
         }
     }
 
@@ -550,7 +436,7 @@ public class PushClient {
      */
     private ErrorResponse parseErrorResponse(String responseBody) {
         try {
-            return objectMapper.readValue(responseBody, ErrorResponse.class);
+            return JsonUtil.fromJson(responseBody, ErrorResponse.class);
         } catch (Exception e) {
             log.debug("ErrorResponse 파싱 실패, 원본 응답: {}", responseBody);
             // 파싱 실패 시 기본 에러 응답 반환
@@ -580,12 +466,12 @@ public class PushClient {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // ✅ 내부 서비스 간 통신은 항상 새로운 서명 생성
+        // 내부 서비스 간 통신은 항상 새로운 서명 생성
         if (signatureValidator != null) {
             try {
                 String timestamp = signatureValidator.generateTimestamp();
 
-                // ✅ 실제 호출할 method와 uri로 서명 생성 (다른 서비스의 헤더를 복사하지 않음!)
+                // 실제 호출할 method와 uri로 서명 생성 (다른 서비스의 헤더를 복사하지 않음!)
                 String signature = signatureValidator.generateSignature(method, uri, timestamp);
 
                 headers.set("X-Gateway-Signature", signature);
