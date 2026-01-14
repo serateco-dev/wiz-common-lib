@@ -1,9 +1,14 @@
 package org.softwiz.platform.iot.common.lib.util;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.softwiz.platform.iot.common.lib.dto.ApiResponse;
+import org.softwiz.platform.iot.common.lib.dto.ErrorResponse;
 import org.softwiz.platform.iot.common.lib.validator.GatewaySignatureValidator;
 import org.springframework.http.*;
+import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -41,6 +46,7 @@ public class EmailClient {
     private final RestTemplate restTemplate;
     private final String baseUrl;
     private final GatewaySignatureValidator signatureValidator;
+    private final ObjectMapper objectMapper;
 
     private static final String EMAIL_SEND_PATH = "/api/v2/email/send";
     private static final String EMAIL_TEMPLATE_SEND_PATH = "/api/v2/email/template/send";
@@ -57,6 +63,7 @@ public class EmailClient {
         this.restTemplate = restTemplate;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.signatureValidator = signatureValidator;
+        this.objectMapper = new ObjectMapper();
     }
 
     /**
@@ -106,6 +113,7 @@ public class EmailClient {
                     ApiResponse.class
             );
 
+            // ✅ 2xx 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -123,11 +131,47 @@ public class EmailClient {
                 return EmailResult.success(emailId, status, body.getMessage());
             }
 
-            return EmailResult.failure("Unexpected response: " + response.getStatusCode());
+            // ❌ 2xx가 아닌 응답
+            return EmailResult.failure(
+                    "EMAIL_SEND_FAILED",
+                    "이메일 서버 응답 오류: " + response.getStatusCode()
+            );
 
-        } catch (RestClientException e) {
-            log.error("이메일 발송 실패 - url: {}, error: {}", url, e.getMessage());
-            return EmailResult.failure(e.getMessage());
+        } catch (HttpClientErrorException ex) {
+            // ✅ 4xx 클라이언트 에러 처리
+            log.warn("이메일 발송 클라이언트 오류 - Status: {}, Body: {}",
+                    ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpClientError(ex, "이메일 발송");
+
+        } catch (HttpServerErrorException ex) {
+            // ✅ 5xx 서버 에러 처리
+            log.error("이메일 발송 서버 오류 - Status: {}, Body: {}",
+                    ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpServerError(ex, "이메일 발송");
+
+        } catch (ResourceAccessException ex) {
+            // ✅ 네트워크 타임아웃, 연결 실패
+            log.error("이메일 서버 연결 실패 - url: {}", url, ex);
+            return EmailResult.failure(
+                    "EMAIL_SERVICE_UNAVAILABLE",
+                    "이메일 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
+            );
+
+        } catch (RestClientException ex) {
+            // ✅ 기타 RestClient 예외
+            log.error("이메일 발송 중 RestClient 예외 - url: {}", url, ex);
+            return EmailResult.failure(
+                    "EMAIL_SEND_ERROR",
+                    "이메일 발송 중 통신 오류가 발생했습니다: " + ex.getMessage()
+            );
+
+        } catch (Exception ex) {
+            // ✅ 예상치 못한 예외
+            log.error("이메일 발송 중 예상치 못한 예외 발생 - url: {}", url, ex);
+            return EmailResult.failure(
+                    "EMAIL_SEND_ERROR",
+                    "이메일 발송 중 오류가 발생했습니다"
+            );
         }
     }
 
@@ -166,6 +210,7 @@ public class EmailClient {
                     ApiResponse.class
             );
 
+            // ✅ 2xx 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -183,11 +228,47 @@ public class EmailClient {
                 return EmailResult.success(emailId, status, body.getMessage());
             }
 
-            return EmailResult.failure("Unexpected response: " + response.getStatusCode());
+            // ❌ 2xx가 아닌 응답
+            return EmailResult.failure(
+                    "TEMPLATE_EMAIL_SEND_FAILED",
+                    "이메일 서버 응답 오류: " + response.getStatusCode()
+            );
 
-        } catch (RestClientException e) {
-            log.error("템플릿 이메일 발송 실패 - url: {}, error: {}", url, e.getMessage());
-            return EmailResult.failure(e.getMessage());
+        } catch (HttpClientErrorException ex) {
+            // ✅ 4xx 클라이언트 에러 처리
+            log.warn("템플릿 이메일 발송 클라이언트 오류 - Status: {}, Body: {}",
+                    ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpClientError(ex, "템플릿 이메일 발송");
+
+        } catch (HttpServerErrorException ex) {
+            // ✅ 5xx 서버 에러 처리
+            log.error("템플릿 이메일 발송 서버 오류 - Status: {}, Body: {}",
+                    ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpServerError(ex, "템플릿 이메일 발송");
+
+        } catch (ResourceAccessException ex) {
+            // ✅ 네트워크 타임아웃, 연결 실패
+            log.error("이메일 서버 연결 실패 - url: {}", url, ex);
+            return EmailResult.failure(
+                    "EMAIL_SERVICE_UNAVAILABLE",
+                    "이메일 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
+            );
+
+        } catch (RestClientException ex) {
+            // ✅ 기타 RestClient 예외
+            log.error("템플릿 이메일 발송 중 RestClient 예외 - url: {}", url, ex);
+            return EmailResult.failure(
+                    "TEMPLATE_EMAIL_SEND_ERROR",
+                    "템플릿 이메일 발송 중 통신 오류가 발생했습니다: " + ex.getMessage()
+            );
+
+        } catch (Exception ex) {
+            // ✅ 예상치 못한 예외
+            log.error("템플릿 이메일 발송 중 예상치 못한 예외 발생 - url: {}", url, ex);
+            return EmailResult.failure(
+                    "TEMPLATE_EMAIL_SEND_ERROR",
+                    "템플릿 이메일 발송 중 오류가 발생했습니다"
+            );
         }
     }
 
@@ -226,6 +307,7 @@ public class EmailClient {
                     ApiResponse.class
             );
 
+            // ✅ 2xx 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -234,9 +316,9 @@ public class EmailClient {
                     @SuppressWarnings("unchecked")
                     java.util.Map<String, Object> dataMap = (java.util.Map<String, Object>) data;
 
-                    Long verifyId = dataMap.get("verifyId") != null ? 
+                    Long verifyId = dataMap.get("verifyId") != null ?
                             ((Number) dataMap.get("verifyId")).longValue() : null;
-                    Long emailId = dataMap.get("emailId") != null ? 
+                    Long emailId = dataMap.get("emailId") != null ?
                             ((Number) dataMap.get("emailId")).longValue() : null;
                     String recipient = (String) dataMap.get("recipient");
                     String verifyPurpose = (String) dataMap.get("verifyPurpose");
@@ -247,11 +329,147 @@ public class EmailClient {
                 }
             }
 
-            return VerifyEmailResult.failure("Unexpected response: " + response.getStatusCode());
+            // ❌ 2xx가 아닌 응답
+            return VerifyEmailResult.failure(
+                    "VERIFY_EMAIL_SEND_FAILED",
+                    "이메일 서버 응답 오류: " + response.getStatusCode()
+            );
 
-        } catch (RestClientException e) {
-            log.error("인증 이메일 발송 실패 - url: {}, error: {}", url, e.getMessage());
-            return VerifyEmailResult.failure(e.getMessage());
+        } catch (HttpClientErrorException ex) {
+            // ✅ 4xx 클라이언트 에러 처리
+            log.warn("인증 이메일 발송 클라이언트 오류 - Status: {}, Body: {}",
+                    ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpClientErrorForVerify(ex, "인증 이메일 발송");
+
+        } catch (HttpServerErrorException ex) {
+            // ✅ 5xx 서버 에러 처리
+            log.error("인증 이메일 발송 서버 오류 - Status: {}, Body: {}",
+                    ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpServerErrorForVerify(ex, "인증 이메일 발송");
+
+        } catch (ResourceAccessException ex) {
+            // ✅ 네트워크 타임아웃, 연결 실패
+            log.error("이메일 서버 연결 실패 - url: {}", url, ex);
+            return VerifyEmailResult.failure(
+                    "EMAIL_SERVICE_UNAVAILABLE",
+                    "이메일 서버에 연결할 수 없습니다. 네트워크를 확인해주세요."
+            );
+
+        } catch (RestClientException ex) {
+            // ✅ 기타 RestClient 예외
+            log.error("인증 이메일 발송 중 RestClient 예외 - url: {}", url, ex);
+            return VerifyEmailResult.failure(
+                    "VERIFY_EMAIL_SEND_ERROR",
+                    "인증 이메일 발송 중 통신 오류가 발생했습니다: " + ex.getMessage()
+            );
+
+        } catch (Exception ex) {
+            // ✅ 예상치 못한 예외
+            log.error("인증 이메일 발송 중 예상치 못한 예외 발생 - url: {}", url, ex);
+            return VerifyEmailResult.failure(
+                    "VERIFY_EMAIL_SEND_ERROR",
+                    "인증 이메일 발송 중 오류가 발생했습니다"
+            );
+        }
+    }
+
+    // ========================================
+    // 에러 응답 처리 헬퍼 메서드
+    // ========================================
+
+    /**
+     * HTTP 4xx 클라이언트 에러 처리 (일반 이메일용)
+     */
+    private EmailResult handleHttpClientError(HttpClientErrorException ex, String operation) {
+        try {
+            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "EMAIL_SEND_FAILED";
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
+                    operation + " 실패: " + ex.getStatusCode();
+
+            return EmailResult.failure(code, message);
+        } catch (Exception parseEx) {
+            log.warn("에러 응답 파싱 실패", parseEx);
+            return EmailResult.failure(
+                    "EMAIL_SEND_FAILED",
+                    operation + " 실패: " + ex.getStatusCode()
+            );
+        }
+    }
+
+    /**
+     * HTTP 5xx 서버 에러 처리 (일반 이메일용)
+     */
+    private EmailResult handleHttpServerError(HttpServerErrorException ex, String operation) {
+        try {
+            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "EMAIL_SEND_ERROR";
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
+                    operation + " 중 서버 오류 발생: " + ex.getStatusCode();
+
+            return EmailResult.failure(code, message);
+        } catch (Exception parseEx) {
+            log.warn("에러 응답 파싱 실패", parseEx);
+            return EmailResult.failure(
+                    "EMAIL_SEND_ERROR",
+                    operation + " 중 서버 오류 발생: " + ex.getStatusCode()
+            );
+        }
+    }
+
+    /**
+     * HTTP 4xx 클라이언트 에러 처리 (인증 이메일용)
+     */
+    private VerifyEmailResult handleHttpClientErrorForVerify(HttpClientErrorException ex, String operation) {
+        try {
+            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "VERIFY_EMAIL_SEND_FAILED";
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
+                    operation + " 실패: " + ex.getStatusCode();
+
+            return VerifyEmailResult.failure(code, message);
+        } catch (Exception parseEx) {
+            log.warn("에러 응답 파싱 실패", parseEx);
+            return VerifyEmailResult.failure(
+                    "VERIFY_EMAIL_SEND_FAILED",
+                    operation + " 실패: " + ex.getStatusCode()
+            );
+        }
+    }
+
+    /**
+     * HTTP 5xx 서버 에러 처리 (인증 이메일용)
+     */
+    private VerifyEmailResult handleHttpServerErrorForVerify(HttpServerErrorException ex, String operation) {
+        try {
+            ErrorResponse errorResponse = parseErrorResponse(ex.getResponseBodyAsString());
+            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "VERIFY_EMAIL_SEND_ERROR";
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() :
+                    operation + " 중 서버 오류 발생: " + ex.getStatusCode();
+
+            return VerifyEmailResult.failure(code, message);
+        } catch (Exception parseEx) {
+            log.warn("에러 응답 파싱 실패", parseEx);
+            return VerifyEmailResult.failure(
+                    "VERIFY_EMAIL_SEND_ERROR",
+                    operation + " 중 서버 오류 발생: " + ex.getStatusCode()
+            );
+        }
+    }
+
+    /**
+     * 에러 응답 파싱
+     */
+    private ErrorResponse parseErrorResponse(String responseBody) {
+        try {
+            return objectMapper.readValue(responseBody, ErrorResponse.class);
+        } catch (Exception e) {
+            log.debug("ErrorResponse 파싱 실패, 원본 응답: {}", responseBody);
+            // 파싱 실패 시 기본 에러 응답 반환
+            return ErrorResponse.builder()
+                    .code("PARSE_ERROR")
+                    .message(responseBody)
+                    .build();
         }
     }
 
@@ -315,28 +533,32 @@ public class EmailClient {
         private final Long emailId;
         private final String status;
         private final String message;
+        private final String errorCode;
         private final String errorMessage;
 
-        private EmailResult(boolean success, Long emailId, String status, String message, String errorMessage) {
+        private EmailResult(boolean success, Long emailId, String status, String message,
+                            String errorCode, String errorMessage) {
             this.success = success;
             this.emailId = emailId;
             this.status = status;
             this.message = message;
+            this.errorCode = errorCode;
             this.errorMessage = errorMessage;
         }
 
         public static EmailResult success(Long emailId, String status, String message) {
-            return new EmailResult(true, emailId, status, message, null);
+            return new EmailResult(true, emailId, status, message, null, null);
         }
 
-        public static EmailResult failure(String errorMessage) {
-            return new EmailResult(false, null, null, null, errorMessage);
+        public static EmailResult failure(String errorCode, String errorMessage) {
+            return new EmailResult(false, null, null, null, errorCode, errorMessage);
         }
 
         public boolean isSuccess() { return success; }
         public Long getEmailId() { return emailId; }
         public String getStatus() { return status; }
         public String getMessage() { return message; }
+        public String getErrorCode() { return errorCode; }
         public String getErrorMessage() { return errorMessage; }
 
         @Override
@@ -344,7 +566,8 @@ public class EmailClient {
             if (success) {
                 return String.format("EmailResult{success=true, emailId=%d, status='%s'}", emailId, status);
             } else {
-                return String.format("EmailResult{success=false, error='%s'}", errorMessage);
+                return String.format("EmailResult{success=false, errorCode='%s', error='%s'}",
+                        errorCode, errorMessage);
             }
         }
     }
@@ -363,28 +586,32 @@ public class EmailClient {
         private final String recipient;
         private final String verifyPurpose;
         private final String message;
+        private final String errorCode;
         private final String errorMessage;
 
-        private VerifyEmailResult(boolean success, Long verifyId, Long emailId, 
-                                  String recipient, String verifyPurpose, 
-                                  String message, String errorMessage) {
+        private VerifyEmailResult(boolean success, Long verifyId, Long emailId,
+                                  String recipient, String verifyPurpose,
+                                  String message, String errorCode, String errorMessage) {
             this.success = success;
             this.verifyId = verifyId;
             this.emailId = emailId;
             this.recipient = recipient;
             this.verifyPurpose = verifyPurpose;
             this.message = message;
+            this.errorCode = errorCode;
             this.errorMessage = errorMessage;
         }
 
-        public static VerifyEmailResult success(Long verifyId, Long emailId, 
-                                                String recipient, String verifyPurpose, 
+        public static VerifyEmailResult success(Long verifyId, Long emailId,
+                                                String recipient, String verifyPurpose,
                                                 String message) {
-            return new VerifyEmailResult(true, verifyId, emailId, recipient, verifyPurpose, message, null);
+            return new VerifyEmailResult(true, verifyId, emailId, recipient, verifyPurpose,
+                    message, null, null);
         }
 
-        public static VerifyEmailResult failure(String errorMessage) {
-            return new VerifyEmailResult(false, null, null, null, null, null, errorMessage);
+        public static VerifyEmailResult failure(String errorCode, String errorMessage) {
+            return new VerifyEmailResult(false, null, null, null, null, null,
+                    errorCode, errorMessage);
         }
 
         public boolean isSuccess() { return success; }
@@ -393,6 +620,7 @@ public class EmailClient {
         public String getRecipient() { return recipient; }
         public String getVerifyPurpose() { return verifyPurpose; }
         public String getMessage() { return message; }
+        public String getErrorCode() { return errorCode; }
         public String getErrorMessage() { return errorMessage; }
 
         @Override
@@ -403,7 +631,8 @@ public class EmailClient {
                         verifyId, emailId, recipient, verifyPurpose
                 );
             } else {
-                return String.format("VerifyEmailResult{success=false, error='%s'}", errorMessage);
+                return String.format("VerifyEmailResult{success=false, errorCode='%s', error='%s'}",
+                        errorCode, errorMessage);
             }
         }
     }
