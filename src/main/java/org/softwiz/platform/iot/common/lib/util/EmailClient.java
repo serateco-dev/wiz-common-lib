@@ -434,7 +434,7 @@ public class EmailClient {
         private final Long emailId;
         private final String status;
         private final String message;
-        private final String errorCode;
+        private final String code;
         private final String errorMessage;
 
         private EmailResult(boolean success, Long emailId, String status, String message,
@@ -443,7 +443,7 @@ public class EmailClient {
             this.emailId = emailId;
             this.status = status;
             this.message = message;
-            this.errorCode = errorCode;
+            this.code = errorCode;
             this.errorMessage = errorMessage;
         }
 
@@ -459,7 +459,7 @@ public class EmailClient {
         public Long getEmailId() { return emailId; }
         public String getStatus() { return status; }
         public String getMessage() { return message; }
-        public String getErrorCode() { return errorCode; }
+        public String getCode() { return code; }
         public String getErrorMessage() { return errorMessage; }
 
         @Override
@@ -468,7 +468,7 @@ public class EmailClient {
                 return String.format("EmailResult{success=true, emailId=%d, status='%s'}", emailId, status);
             } else {
                 return String.format("EmailResult{success=false, errorCode='%s', error='%s'}",
-                        errorCode, errorMessage);
+                        code, errorMessage);
             }
         }
     }
@@ -487,7 +487,7 @@ public class EmailClient {
         private final String recipient;
         private final String verifyPurpose;
         private final String message;
-        private final String errorCode;
+        private final String code;
         private final String errorMessage;
 
         private VerifyEmailResult(boolean success, Long verifyId, Long emailId,
@@ -499,7 +499,7 @@ public class EmailClient {
             this.recipient = recipient;
             this.verifyPurpose = verifyPurpose;
             this.message = message;
-            this.errorCode = errorCode;
+            this.code = errorCode;
             this.errorMessage = errorMessage;
         }
 
@@ -521,7 +521,7 @@ public class EmailClient {
         public String getRecipient() { return recipient; }
         public String getVerifyPurpose() { return verifyPurpose; }
         public String getMessage() { return message; }
-        public String getErrorCode() { return errorCode; }
+        public String getCode() { return code; }
         public String getErrorMessage() { return errorMessage; }
 
         @Override
@@ -533,7 +533,7 @@ public class EmailClient {
                 );
             } else {
                 return String.format("VerifyEmailResult{success=false, errorCode='%s', error='%s'}",
-                        errorCode, errorMessage);
+                        code, errorMessage);
             }
         }
     }

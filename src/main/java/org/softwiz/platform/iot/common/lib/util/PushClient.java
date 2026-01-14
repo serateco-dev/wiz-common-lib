@@ -507,16 +507,16 @@ public class PushClient {
         private final Long pushId;
         private final String status;
         private final String message;
-        private final String errorCode;
+        private final String code;
         private final String errorMessage;
 
         private PushResult(boolean success, Long pushId, String status, String message,
-                           String errorCode, String errorMessage) {
+                           String code, String errorMessage) {
             this.success = success;
             this.pushId = pushId;
             this.status = status;
             this.message = message;
-            this.errorCode = errorCode;
+            this.code = code;
             this.errorMessage = errorMessage;
         }
 
@@ -532,7 +532,7 @@ public class PushClient {
         public Long getPushId() { return pushId; }
         public String getStatus() { return status; }
         public String getMessage() { return message; }
-        public String getErrorCode() { return errorCode; }
+        public String getCode() { return code; }
         public String getErrorMessage() { return errorMessage; }
 
         @Override
@@ -541,7 +541,7 @@ public class PushClient {
                 return String.format("PushResult{success=true, pushId=%d, status='%s'}", pushId, status);
             } else {
                 return String.format("PushResult{success=false, errorCode='%s', error='%s'}",
-                        errorCode, errorMessage);
+                        code, errorMessage);
             }
         }
     }
@@ -598,7 +598,7 @@ public class PushClient {
         private final String status;
         private final List<PushResultItem> results;
         private final String message;
-        private final String errorCode;
+        private final String code;
         private final String errorMessage;
 
         private TemplatePushResult(boolean success, String templateCode, String resolvedTitle,
@@ -618,7 +618,7 @@ public class PushClient {
             this.status = status;
             this.results = results != null ? results : Collections.emptyList();
             this.message = message;
-            this.errorCode = errorCode;
+            this.code = errorCode;
             this.errorMessage = errorMessage;
         }
 
@@ -649,7 +649,7 @@ public class PushClient {
         public String getStatus() { return status; }
         public List<PushResultItem> getResults() { return results; }
         public String getMessage() { return message; }
-        public String getErrorCode() { return errorCode; }
+        public String getCode() { return code; }
         public String getErrorMessage() { return errorMessage; }
 
         @Override
@@ -661,7 +661,7 @@ public class PushClient {
                 );
             } else {
                 return String.format("TemplatePushResult{success=false, errorCode='%s', error='%s'}",
-                        errorCode, errorMessage);
+                        code, errorMessage);
             }
         }
     }
@@ -676,13 +676,13 @@ public class PushClient {
     public static class TokenSaveResult {
         private final boolean success;
         private final String message;
-        private final String errorCode;
+        private final String code;
         private final String errorMessage;
 
         private TokenSaveResult(boolean success, String message, String errorCode, String errorMessage) {
             this.success = success;
             this.message = message;
-            this.errorCode = errorCode;
+            this.code = errorCode;
             this.errorMessage = errorMessage;
         }
 
@@ -696,7 +696,7 @@ public class PushClient {
 
         public boolean isSuccess() { return success; }
         public String getMessage() { return message; }
-        public String getErrorCode() { return errorCode; }
+        public String getCode() { return code; }
         public String getErrorMessage() { return errorMessage; }
 
         @Override
@@ -705,7 +705,7 @@ public class PushClient {
                 return String.format("TokenSaveResult{success=true, message='%s'}", message);
             } else {
                 return String.format("TokenSaveResult{success=false, errorCode='%s', error='%s'}",
-                        errorCode, errorMessage);
+                        code, errorMessage);
             }
         }
     }
