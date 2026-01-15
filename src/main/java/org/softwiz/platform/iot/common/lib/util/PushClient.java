@@ -14,6 +14,7 @@ import org.springframework.web.client.RestTemplate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 푸시 서비스 클라이언트
@@ -29,6 +30,7 @@ import java.util.List;
  * <p>K8s NetworkPolicy로 같은 네임스페이스 내 Pod 간 통신만 허용되므로,
  * 외부에서 직접 마이크로서비스 API 호출은 불가능합니다.</p>
  *
+ * <h3>Bean 설정:</h3>
  * <pre>{@code
  * @Configuration
  * public class PushClientConfig {
@@ -41,6 +43,147 @@ import java.util.List;
  *         return new PushClient(restTemplate, messageServiceUrl, signatureValidator);
  *     }
  * }
+ * }</pre>
+ *
+ * <h3>1. 일반 푸시 발송:</h3>
+ * <pre>{@code
+ * // 기본 푸시 발송
+ * PushUtil.PushRequest request = PushUtil.builder()
+ *     .serviceId("NEST")
+ *     .userNo(1001L)
+ *     .title("새 알림")
+ *     .content("새로운 알림이 있습니다.")
+ *     .warnDiv(PushUtil.WarnDiv.INFO)
+ *     .build();
+ *
+ * PushResult result = pushClient.send(request);
+ * if (result.isSuccess()) {
+ *     Long pushId = result.getPushId();
+ * }
+ *
+ * // 상세 옵션 포함
+ * PushUtil.PushRequest request = PushUtil.builder()
+ *     .serviceId("NEST")
+ *     .userNo(1001L)
+ *     .title("경고")
+ *     .content("긴급 상황이 발생했습니다.")
+ *     .warnDiv(PushUtil.WarnDiv.WARNING)
+ *     .pushValue("EMERGENCY_ALERT")
+ *     .linkUrl("https://app.example.com/alert/123")
+ *     .imageUrl("https://cdn.example.com/warning.png")
+ *     .dataField("orderId", 12345)
+ *     .dataField("status", "URGENT")
+ *     .build();
+ *
+ * // 시스템 알림 (동의 확인 스킵)
+ * PushUtil.PushRequest request = PushUtil.builder()
+ *     .serviceId("NEST")
+ *     .userNo(1001L)
+ *     .title("시스템 점검")
+ *     .content("서버 점검이 예정되어 있습니다.")
+ *     .skipConsentCheck()
+ *     .build();
+ *
+ * // 마케팅 푸시 (동의 확인 필요)
+ * PushUtil.PushRequest request = PushUtil.builder()
+ *     .serviceId("NEST")
+ *     .userNo(1001L)
+ *     .title("특별 할인!")
+ *     .content("최대 50% 할인 이벤트")
+ *     .marketingConsent()
+ *     .build();
+ * }</pre>
+ *
+ * <h3>2. 템플릿 푸시 발송:</h3>
+ * <pre>{@code
+ * // 개인 발송
+ * PushUtil.TemplatePushRequest request = PushUtil.templateBuilder()
+ *     .serviceId("NEST")
+ *     .templateCode("ORDER_COMPLETE")
+ *     .userNo(1001L)
+ *     .variable("orderNo", "12345")
+ *     .variable("deliveryDate", "2025-12-20")
+ *     .build();
+ *
+ * TemplatePushResult result = pushClient.sendTemplate(request);
+ * if (result.isSuccess()) {
+ *     int successCount = result.getSuccessCount();
+ * }
+ *
+ * // 다중 발송
+ * PushUtil.TemplatePushRequest request = PushUtil.templateBuilder()
+ *     .serviceId("NEST")
+ *     .templateCode("MARKETING_EVENT")
+ *     .userNos(1001L, 1002L, 1003L)
+ *     .variable("eventName", "연말 할인")
+ *     .build();
+ *
+ * // 전체 발송
+ * PushUtil.TemplatePushRequest request = PushUtil.templateBuilder()
+ *     .serviceId("NEST")
+ *     .templateCode("SYSTEM_NOTICE")
+ *     .sendAll()
+ *     .variable("noticeTitle", "서버 점검 안내")
+ *     .skipConsentCheck()
+ *     .build();
+ * }</pre>
+ *
+ * <h3>3. 토큰 저장:</h3>
+ * <pre>{@code
+ * PushUtil.TokenRequest request = PushUtil.tokenBuilder()
+ *     .serviceId("NEST")
+ *     .userNo(1001L)
+ *     .pushToken("fCm_token_xxx...")
+ *     .deviceId("abc123def456")
+ *     .android()                    // 또는 .ios(), .web()
+ *     .deviceModel("Galaxy S24")
+ *     .osVersion("14")
+ *     .appVersion("1.0.0")
+ *     .build();
+ *
+ * TokenSaveResult result = pushClient.saveToken(request);
+ * }</pre>
+ *
+ * <h3>4. 커스텀 API 호출 (Map 기반):</h3>
+ * <p>새로운 API가 추가되거나 커스텀 필드가 필요한 경우 사용합니다.</p>
+ * <pre>{@code
+ * Map<String, Object> customRequest = new LinkedHashMap<>();
+ * customRequest.put("serviceId", "NEST");
+ * customRequest.put("userNo", 1001L);
+ * customRequest.put("customField", "customValue");
+ *
+ * GenericResult result = pushClient.sendCustom("/api/v2/push/custom-endpoint", customRequest);
+ * if (result.isSuccess()) {
+ *     Long pushId = result.getLong("pushId");
+ *     String status = result.getString("status");
+ * }
+ * }</pre>
+ *
+ * <h3>5. 외부 URL 직접 호출:</h3>
+ * <pre>{@code
+ * GenericResult result = pushClient.sendToUrl(
+ *     "http://other-service:8080/api/v2/custom",
+ *     customRequest,
+ *     accessToken
+ * );
+ * }</pre>
+ *
+ * <h3>6. 편의 메서드 (정적 메서드):</h3>
+ * <pre>{@code
+ * // 간단한 정보 알림
+ * PushUtil.PushRequest request = PushUtil.info("NEST", 1001L, "새 메시지가 도착했습니다.");
+ *
+ * // 경고 알림
+ * PushUtil.PushRequest request = PushUtil.warning("NEST", 1001L, "주의가 필요합니다.");
+ *
+ * // 위험 알림
+ * PushUtil.PushRequest request = PushUtil.danger("NEST", 1001L, "긴급 상황입니다!");
+ *
+ * // 시스템 알림
+ * PushUtil.PushRequest request = PushUtil.system("NEST", 1001L, "점검 안내", "서버 점검 예정");
+ *
+ * // 마케팅 알림
+ * PushUtil.PushRequest request = PushUtil.marketing("NEST", 1001L, "이벤트", "특별 할인!");
  * }</pre>
  */
 @Slf4j
@@ -79,6 +222,13 @@ public class PushClient {
         this(restTemplate, baseUrl, null);
     }
 
+    /**
+     * 기본 URL 반환
+     */
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
     // ========================================
     // 일반 푸시 발송
     // ========================================
@@ -114,7 +264,6 @@ public class PushClient {
                     ApiResponse.class
             );
 
-            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -135,22 +284,18 @@ public class PushClient {
             return PushResult.failure("PUSH_SEND_FAILED", "Unexpected response: " + response.getStatusCode());
 
         } catch (HttpClientErrorException | HttpServerErrorException ex) {
-            // 4xx, 5xx 에러 처리
             log.error("푸시 발송 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
             return handleHttpError(ex, "푸시 발송");
 
         } catch (ResourceAccessException ex) {
-            // 네트워크 타임아웃, 연결 실패
             log.error("푸시 서버 연결 실패 - url: {}", url, ex);
             return PushResult.failure("PUSH_SERVICE_UNAVAILABLE", "푸시 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // 기타 RestClient 예외
             log.error("푸시 발송 중 RestClient 예외 - url: {}", url, ex);
             return PushResult.failure("PUSH_SEND_ERROR", "푸시 발송 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // 예상치 못한 예외
             log.error("푸시 발송 중 예상치 못한 예외 - url: {}", url, ex);
             return PushResult.failure("PUSH_SEND_ERROR", "푸시 발송 중 오류가 발생했습니다.");
         }
@@ -191,7 +336,6 @@ public class PushClient {
                     ApiResponse.class
             );
 
-            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
                 ApiResponse body = response.getBody();
                 Object data = body.getData();
@@ -239,30 +383,23 @@ public class PushClient {
             return TemplatePushResult.failure("TEMPLATE_PUSH_SEND_FAILED", "Unexpected response: " + response.getStatusCode());
 
         } catch (HttpClientErrorException | HttpServerErrorException ex) {
-            // 4xx, 5xx 에러 처리
             log.error("템플릿 푸시 발송 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
             return handleHttpErrorForTemplate(ex, "템플릿 푸시 발송");
 
         } catch (ResourceAccessException ex) {
-            // 네트워크 타임아웃, 연결 실패
             log.error("푸시 서버 연결 실패 - url: {}", url, ex);
             return TemplatePushResult.failure("PUSH_SERVICE_UNAVAILABLE", "푸시 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // 기타 RestClient 예외
             log.error("템플릿 푸시 발송 중 RestClient 예외 - url: {}", url, ex);
             return TemplatePushResult.failure("TEMPLATE_PUSH_SEND_ERROR", "템플릿 푸시 발송 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // 예상치 못한 예외
             log.error("템플릿 푸시 발송 중 예상치 못한 예외 - url: {}", url, ex);
             return TemplatePushResult.failure("TEMPLATE_PUSH_SEND_ERROR", "템플릿 푸시 발송 중 오류가 발생했습니다.");
         }
     }
 
-    /**
-     * results 배열 파싱
-     */
     @SuppressWarnings("unchecked")
     private List<PushResultItem> parseResults(Object resultsObj) {
         if (resultsObj == null) {
@@ -329,7 +466,6 @@ public class PushClient {
                     ApiResponse.class
             );
 
-            // 성공 응답 처리
             if (response.getStatusCode().is2xxSuccessful()) {
                 return TokenSaveResult.success("토큰이 성공적으로 저장되었습니다");
             }
@@ -337,24 +473,232 @@ public class PushClient {
             return TokenSaveResult.failure("TOKEN_SAVE_FAILED", "Unexpected response: " + response.getStatusCode());
 
         } catch (HttpClientErrorException | HttpServerErrorException ex) {
-            // 4xx, 5xx 에러 처리
             log.error("토큰 저장 HTTP 오류 - Status: {}, Body: {}", ex.getStatusCode(), ex.getResponseBodyAsString());
             return handleHttpErrorForToken(ex, "토큰 저장");
 
         } catch (ResourceAccessException ex) {
-            // 네트워크 타임아웃, 연결 실패
             log.error("푸시 서버 연결 실패 - url: {}", url, ex);
             return TokenSaveResult.failure("PUSH_SERVICE_UNAVAILABLE", "푸시 서버에 연결할 수 없습니다.");
 
         } catch (RestClientException ex) {
-            // 기타 RestClient 예외
             log.error("토큰 저장 중 RestClient 예외 - url: {}", url, ex);
             return TokenSaveResult.failure("TOKEN_SAVE_ERROR", "토큰 저장 중 통신 오류: " + ex.getMessage());
 
         } catch (Exception ex) {
-            // 예상치 못한 예외
             log.error("토큰 저장 중 예상치 못한 예외 - url: {}", url, ex);
             return TokenSaveResult.failure("TOKEN_SAVE_ERROR", "토큰 저장 중 오류가 발생했습니다.");
+        }
+    }
+
+    // ========================================
+    // 커스텀 API 호출 (범용)
+    // ========================================
+
+    /**
+     * 커스텀 API 호출 (Map 기반 요청)
+     *
+     * <p>새로운 API 엔드포인트나 커스텀 필드가 필요한 경우 사용합니다.</p>
+     *
+     * <pre>{@code
+     * Map<String, Object> request = new LinkedHashMap<>();
+     * request.put("serviceId", "NEST");
+     * request.put("userNo", 1001L);
+     * request.put("content", "테스트 메시지");
+     * request.put("customField", "customValue");
+     *
+     * GenericResult result = pushClient.sendCustom("/api/v2/push/send", request);
+     * }</pre>
+     *
+     * @param apiPath API 경로 (예: /api/v2/push/send)
+     * @param request 요청 데이터 (Map)
+     * @return 범용 결과
+     */
+    public GenericResult sendCustom(String apiPath, Map<String, Object> request) {
+        return sendCustom(apiPath, request, null);
+    }
+
+    /**
+     * 커스텀 API 호출 (Map 기반 요청 + 인증 토큰)
+     *
+     * @param apiPath API 경로 (예: /api/v2/push/send)
+     * @param request 요청 데이터 (Map)
+     * @param accessToken 접근 토큰 (Gateway 인증용)
+     * @return 범용 결과
+     */
+    public GenericResult sendCustom(String apiPath, Map<String, Object> request, String accessToken) {
+        String url = baseUrl + apiPath;
+
+        try {
+            HttpHeaders headers = createHeaders(accessToken, "POST", apiPath);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            log.debug("커스텀 API 호출 - url: {}, request: {}", url, request);
+
+            ResponseEntity<ApiResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    ApiResponse.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                ApiResponse body = response.getBody();
+                Object data = body.getData();
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> dataMap = data instanceof Map ? (Map<String, Object>) data : null;
+
+                return GenericResult.success(dataMap, body.getMessage());
+            }
+
+            return GenericResult.failure("CUSTOM_API_FAILED", "Unexpected response: " + response.getStatusCode());
+
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            log.error("커스텀 API 호출 HTTP 오류 - url: {}, Status: {}, Body: {}",
+                    url, ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpErrorForGeneric(ex, "커스텀 API 호출");
+
+        } catch (ResourceAccessException ex) {
+            log.error("푸시 서버 연결 실패 - url: {}", url, ex);
+            return GenericResult.failure("PUSH_SERVICE_UNAVAILABLE", "푸시 서버에 연결할 수 없습니다.");
+
+        } catch (RestClientException ex) {
+            log.error("커스텀 API 호출 중 RestClient 예외 - url: {}", url, ex);
+            return GenericResult.failure("CUSTOM_API_ERROR", "커스텀 API 호출 중 통신 오류: " + ex.getMessage());
+
+        } catch (Exception ex) {
+            log.error("커스텀 API 호출 중 예상치 못한 예외 - url: {}", url, ex);
+            return GenericResult.failure("CUSTOM_API_ERROR", "커스텀 API 호출 중 오류가 발생했습니다.");
+        }
+    }
+
+    /**
+     * 커스텀 API 호출 (Object 기반 요청)
+     *
+     * @param apiPath API 경로 (예: /api/v2/push/custom)
+     * @param request 요청 객체 (DTO)
+     * @return 범용 결과
+     */
+    public GenericResult sendCustom(String apiPath, Object request) {
+        return sendCustom(apiPath, request, null);
+    }
+
+    /**
+     * 커스텀 API 호출 (Object 기반 요청 + 인증 토큰)
+     *
+     * @param apiPath API 경로 (예: /api/v2/push/custom)
+     * @param request 요청 객체 (DTO)
+     * @param accessToken 접근 토큰 (Gateway 인증용)
+     * @return 범용 결과
+     */
+    public GenericResult sendCustom(String apiPath, Object request, String accessToken) {
+        String url = baseUrl + apiPath;
+
+        try {
+            HttpHeaders headers = createHeaders(accessToken, "POST", apiPath);
+            HttpEntity<Object> entity = new HttpEntity<>(request, headers);
+
+            log.debug("커스텀 API 호출 - url: {}, requestType: {}", url, request.getClass().getSimpleName());
+
+            ResponseEntity<ApiResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.POST,
+                    entity,
+                    ApiResponse.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                ApiResponse body = response.getBody();
+                Object data = body.getData();
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> dataMap = data instanceof Map ? (Map<String, Object>) data : null;
+
+                return GenericResult.success(dataMap, body.getMessage());
+            }
+
+            return GenericResult.failure("CUSTOM_API_FAILED", "Unexpected response: " + response.getStatusCode());
+
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            log.error("커스텀 API 호출 HTTP 오류 - url: {}, Status: {}, Body: {}",
+                    url, ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpErrorForGeneric(ex, "커스텀 API 호출");
+
+        } catch (ResourceAccessException ex) {
+            log.error("푸시 서버 연결 실패 - url: {}", url, ex);
+            return GenericResult.failure("PUSH_SERVICE_UNAVAILABLE", "푸시 서버에 연결할 수 없습니다.");
+
+        } catch (RestClientException ex) {
+            log.error("커스텀 API 호출 중 RestClient 예외 - url: {}", url, ex);
+            return GenericResult.failure("CUSTOM_API_ERROR", "커스텀 API 호출 중 통신 오류: " + ex.getMessage());
+
+        } catch (Exception ex) {
+            log.error("커스텀 API 호출 중 예상치 못한 예외 - url: {}", url, ex);
+            return GenericResult.failure("CUSTOM_API_ERROR", "커스텀 API 호출 중 오류가 발생했습니다.");
+        }
+    }
+
+    /**
+     * 완전한 URL로 커스텀 API 호출 (외부 서비스 호출 가능)
+     *
+     * @param fullUrl 전체 URL (예: http://other-service:8080/api/v2/custom)
+     * @param request 요청 데이터 (Map)
+     * @param accessToken 접근 토큰 (Gateway 인증용)
+     * @return 범용 결과
+     */
+    public GenericResult sendToUrl(String fullUrl, Map<String, Object> request, String accessToken) {
+        try {
+            String apiPath = extractPath(fullUrl);
+
+            HttpHeaders headers = createHeaders(accessToken, "POST", apiPath);
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(request, headers);
+
+            log.debug("외부 URL API 호출 - url: {}, request: {}", fullUrl, request);
+
+            ResponseEntity<ApiResponse> response = restTemplate.exchange(
+                    fullUrl,
+                    HttpMethod.POST,
+                    entity,
+                    ApiResponse.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                ApiResponse body = response.getBody();
+                Object data = body.getData();
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> dataMap = data instanceof Map ? (Map<String, Object>) data : null;
+
+                return GenericResult.success(dataMap, body.getMessage());
+            }
+
+            return GenericResult.failure("CUSTOM_API_FAILED", "Unexpected response: " + response.getStatusCode());
+
+        } catch (HttpClientErrorException | HttpServerErrorException ex) {
+            log.error("외부 URL API 호출 HTTP 오류 - url: {}, Status: {}, Body: {}",
+                    fullUrl, ex.getStatusCode(), ex.getResponseBodyAsString());
+            return handleHttpErrorForGeneric(ex, "외부 URL API 호출");
+
+        } catch (ResourceAccessException ex) {
+            log.error("서버 연결 실패 - url: {}", fullUrl, ex);
+            return GenericResult.failure("SERVICE_UNAVAILABLE", "서버에 연결할 수 없습니다.");
+
+        } catch (RestClientException ex) {
+            log.error("외부 URL API 호출 중 RestClient 예외 - url: {}", fullUrl, ex);
+            return GenericResult.failure("CUSTOM_API_ERROR", "API 호출 중 통신 오류: " + ex.getMessage());
+
+        } catch (Exception ex) {
+            log.error("외부 URL API 호출 중 예상치 못한 예외 - url: {}", fullUrl, ex);
+            return GenericResult.failure("CUSTOM_API_ERROR", "API 호출 중 오류가 발생했습니다.");
+        }
+    }
+
+    private String extractPath(String fullUrl) {
+        try {
+            java.net.URL url = new java.net.URL(fullUrl);
+            return url.getPath();
+        } catch (Exception e) {
+            return fullUrl;
         }
     }
 
@@ -362,10 +706,6 @@ public class PushClient {
     // 에러 응답 처리 헬퍼 메서드
     // ========================================
 
-    /**
-     * HTTP 에러 처리 (일반 푸시용)
-     * 4xx, 5xx 에러를 통합 처리
-     */
     private PushResult handleHttpError(Exception ex, String operation) {
         String responseBody = "";
         if (ex instanceof HttpClientErrorException) {
@@ -385,10 +725,6 @@ public class PushClient {
         }
     }
 
-    /**
-     * HTTP 에러 처리 (템플릿 푸시용)
-     * 4xx, 5xx 에러를 통합 처리
-     */
     private TemplatePushResult handleHttpErrorForTemplate(Exception ex, String operation) {
         String responseBody = "";
         if (ex instanceof HttpClientErrorException) {
@@ -408,10 +744,6 @@ public class PushClient {
         }
     }
 
-    /**
-     * HTTP 에러 처리 (토큰 저장용)
-     * 4xx, 5xx 에러를 통합 처리
-     */
     private TokenSaveResult handleHttpErrorForToken(Exception ex, String operation) {
         String responseBody = "";
         if (ex instanceof HttpClientErrorException) {
@@ -431,15 +763,30 @@ public class PushClient {
         }
     }
 
-    /**
-     * 에러 응답 파싱
-     */
+    private GenericResult handleHttpErrorForGeneric(Exception ex, String operation) {
+        String responseBody = "";
+        if (ex instanceof HttpClientErrorException) {
+            responseBody = ((HttpClientErrorException) ex).getResponseBodyAsString();
+        } else if (ex instanceof HttpServerErrorException) {
+            responseBody = ((HttpServerErrorException) ex).getResponseBodyAsString();
+        }
+
+        try {
+            ErrorResponse errorResponse = parseErrorResponse(responseBody);
+            String code = errorResponse.getCode() != null ? errorResponse.getCode() : "API_CALL_FAILED";
+            String message = errorResponse.getMessage() != null ? errorResponse.getMessage() : operation + " 실패";
+            return GenericResult.failure(code, message);
+        } catch (Exception parseEx) {
+            log.warn("에러 응답 파싱 실패", parseEx);
+            return GenericResult.failure("API_CALL_FAILED", operation + " 실패");
+        }
+    }
+
     private ErrorResponse parseErrorResponse(String responseBody) {
         try {
             return JsonUtil.fromJson(responseBody, ErrorResponse.class);
         } catch (Exception e) {
             log.debug("ErrorResponse 파싱 실패, 원본 응답: {}", responseBody);
-            // 파싱 실패 시 기본 에러 응답 반환
             return ErrorResponse.builder()
                     .code("PARSE_ERROR")
                     .message(responseBody)
@@ -451,27 +798,13 @@ public class PushClient {
     // 헤더 생성
     // ========================================
 
-    /**
-     * HTTP 헤더 생성
-     *
-     * <p>내부 서비스 간 통신을 위해 항상 새로운 서명을 생성합니다.</p>
-     * <p>실제 호출할 method와 uri를 사용하여 서명을 생성합니다.</p>
-     *
-     * @param accessToken Bearer 토큰 (선택)
-     * @param method HTTP Method (예: POST, GET)
-     * @param uri 요청 URI (예: /api/v2/push/send)
-     * @return HTTP 헤더
-     */
     private HttpHeaders createHeaders(String accessToken, String method, String uri) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // 내부 서비스 간 통신은 항상 새로운 서명 생성
         if (signatureValidator != null) {
             try {
                 String timestamp = signatureValidator.generateTimestamp();
-
-                // 실제 호출할 method와 uri로 서명 생성 (다른 서비스의 헤더를 복사하지 않음!)
                 String signature = signatureValidator.generateSignature(method, uri, timestamp);
 
                 headers.set("X-Gateway-Signature", signature);
@@ -487,7 +820,6 @@ public class PushClient {
                     "PushClient 생성 시 GatewaySignatureValidator를 주입하세요.");
         }
 
-        // AccessToken이 제공된 경우 Bearer 토큰 추가
         if (accessToken != null && !accessToken.isEmpty()) {
             headers.setBearerAuth(accessToken);
         }
@@ -499,9 +831,6 @@ public class PushClient {
     // 결과 클래스 - 일반 푸시
     // ========================================
 
-    /**
-     * 푸시 발송 결과
-     */
     public static class PushResult {
         private final boolean success;
         private final Long pushId;
@@ -550,9 +879,6 @@ public class PushClient {
     // 결과 클래스 - 개별 푸시 결과 항목
     // ========================================
 
-    /**
-     * 개별 푸시 발송 결과 항목 (다중 발송 시 사용)
-     */
     public static class PushResultItem {
         private final Long pushId;
         private final Long userNo;
@@ -582,9 +908,6 @@ public class PushClient {
     // 결과 클래스 - 템플릿 푸시
     // ========================================
 
-    /**
-     * 템플릿 푸시 발송 결과
-     */
     public static class TemplatePushResult {
         private final boolean success;
         private final String templateCode;
@@ -670,9 +993,6 @@ public class PushClient {
     // 결과 클래스 - 토큰 저장
     // ========================================
 
-    /**
-     * 토큰 저장 결과
-     */
     public static class TokenSaveResult {
         private final boolean success;
         private final String message;
@@ -705,6 +1025,78 @@ public class PushClient {
                 return String.format("TokenSaveResult{success=true, message='%s'}", message);
             } else {
                 return String.format("TokenSaveResult{success=false, errorCode='%s', error='%s'}",
+                        code, errorMessage);
+            }
+        }
+    }
+
+    // ========================================
+    // 결과 클래스 - 범용
+    // ========================================
+
+    /**
+     * 범용 API 호출 결과
+     */
+    public static class GenericResult {
+        private final boolean success;
+        private final Map<String, Object> data;
+        private final String message;
+        private final String code;
+        private final String errorMessage;
+
+        private GenericResult(boolean success, Map<String, Object> data, String message,
+                              String errorCode, String errorMessage) {
+            this.success = success;
+            this.data = data;
+            this.message = message;
+            this.code = errorCode;
+            this.errorMessage = errorMessage;
+        }
+
+        public static GenericResult success(Map<String, Object> data, String message) {
+            return new GenericResult(true, data, message, null, null);
+        }
+
+        public static GenericResult failure(String errorCode, String errorMessage) {
+            return new GenericResult(false, null, null, errorCode, errorMessage);
+        }
+
+        public boolean isSuccess() { return success; }
+        public Map<String, Object> getData() { return data; }
+        public String getMessage() { return message; }
+        public String getCode() { return code; }
+        public String getErrorMessage() { return errorMessage; }
+
+        public Long getLong(String key) {
+            if (data == null || !data.containsKey(key)) return null;
+            Object value = data.get(key);
+            if (value instanceof Number) {
+                return ((Number) value).longValue();
+            }
+            return null;
+        }
+
+        public String getString(String key) {
+            if (data == null || !data.containsKey(key)) return null;
+            Object value = data.get(key);
+            return value != null ? value.toString() : null;
+        }
+
+        public Integer getInt(String key) {
+            if (data == null || !data.containsKey(key)) return null;
+            Object value = data.get(key);
+            if (value instanceof Number) {
+                return ((Number) value).intValue();
+            }
+            return null;
+        }
+
+        @Override
+        public String toString() {
+            if (success) {
+                return String.format("GenericResult{success=true, data=%s}", data);
+            } else {
+                return String.format("GenericResult{success=false, errorCode='%s', error='%s'}",
                         code, errorMessage);
             }
         }

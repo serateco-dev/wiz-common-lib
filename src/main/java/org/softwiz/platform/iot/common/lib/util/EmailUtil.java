@@ -103,11 +103,31 @@ import java.util.*;
  *     .variable("userName", "홍길동")
  *     .build();
  *
- * // 10. RestTemplate으로 발송
+ * // 10. 인증 이메일 발송 (회원 정보 포함 - USER)
+ * VerifyEmailRequest request = EmailUtil.verifyBuilder()
+ *     .serviceId("NEST")
+ *     .recipient("user@example.com")
+ *     .verifyPurpose("EMAIL_VERIFY")
+ *     .templateCode("EMAIL_VERIFICATION")
+ *     .memberUser(1001L)          // memberType=USER, memberNo=1001
+ *     .variable("userName", "홍길동")
+ *     .build();
+ *
+ * // 11. 인증 이메일 발송 (회원 정보 포함 - ADMIN)
+ * VerifyEmailRequest request = EmailUtil.verifyBuilder()
+ *     .serviceId("NEST")
+ *     .recipient("admin@example.com")
+ *     .verifyPurpose("ADMIN_TEMP_PASSWORD")
+ *     .templateCode("ADMIN_TEMP_PASSWORD")
+ *     .memberAdmin(100L)          // memberType=ADMIN, memberNo=100
+ *     .createdBy(1L)              // 생성자 (관리자 번호)
+ *     .build();
+ *
+ * // 12. RestTemplate으로 발송
  * String emailServiceUrl = "http://wizmessage:8098/api/v2/email/send";
  * ApiResponse response = restTemplate.postForObject(emailServiceUrl, request, ApiResponse.class);
  *
- * // 11. 템플릿 발송
+ * // 13. 템플릿 발송
  * String templateEmailUrl = "http://wizmessage:8098/api/v2/email/template/send";
  * ApiResponse response = restTemplate.postForObject(templateEmailUrl, request, ApiResponse.class);
  * }
@@ -145,6 +165,24 @@ public class EmailUtil {
         }
     }
 
+    /**
+     * 회원 타입
+     */
+    public enum MemberType {
+        USER("USER"),
+        ADMIN("ADMIN");
+
+        private final String code;
+
+        MemberType(String code) {
+            this.code = code;
+        }
+
+        public String getCode() {
+            return code;
+        }
+    }
+
     // ========================================
     // 이메일 요청 DTO
     // ========================================
@@ -162,12 +200,14 @@ public class EmailUtil {
         private String recipient;
         private String subject;
         private String content;
-        private Boolean isHtml;
-        private String senderEmail;
+        private String contentType;
+        private String emailType;
         private String senderName;
         private String cc;
         private String bcc;
         private String recipientName;
+        private Long userNo;
+        private Long createdBy;
     }
 
     /**
@@ -183,11 +223,12 @@ public class EmailUtil {
         private String templateCode;
         private String recipient;
         private Map<String, String> variables;
-        private String senderEmail;
         private String senderName;
         private String cc;
         private String bcc;
         private String recipientName;
+        private Long userNo;
+        private Long createdBy;
     }
 
     /**
@@ -216,6 +257,21 @@ public class EmailUtil {
          * 만료 시간 (분, 기본 10분)
          */
         private Integer expireMinutes;
+
+        /**
+         * 회원 타입 (USER, ADMIN) - 비회원이면 null
+         */
+        private String memberType;
+
+        /**
+         * 회원 번호 (user_no 또는 admin_no) - 비회원이면 null
+         */
+        private Long memberNo;
+
+        /**
+         * 생성자 (관리자 번호)
+         */
+        private Long createdBy;
     }
 
     // ========================================
@@ -231,12 +287,14 @@ public class EmailUtil {
         private String recipient;
         private String subject;
         private String content;
-        private Boolean isHtml = true;
-        private String senderEmail;
+        private String contentType = "HTML";
+        private String emailType = "SYSTEM";
         private String senderName;
         private String cc;
         private String bcc;
         private String recipientName;
+        private Long userNo;
+        private Long createdBy;
 
         public EmailRequestBuilder serviceId(String serviceId) {
             this.serviceId = serviceId;
@@ -259,22 +317,37 @@ public class EmailUtil {
         }
 
         public EmailRequestBuilder html() {
-            this.isHtml = true;
+            this.contentType = "HTML";
             return this;
         }
 
         public EmailRequestBuilder text() {
-            this.isHtml = false;
+            this.contentType = "TEXT";
             return this;
         }
 
-        public EmailRequestBuilder isHtml(boolean isHtml) {
-            this.isHtml = isHtml;
+        public EmailRequestBuilder contentType(String contentType) {
+            this.contentType = contentType;
             return this;
         }
 
-        public EmailRequestBuilder senderEmail(String senderEmail) {
-            this.senderEmail = senderEmail;
+        public EmailRequestBuilder emailType(String emailType) {
+            this.emailType = emailType;
+            return this;
+        }
+
+        public EmailRequestBuilder system() {
+            this.emailType = "SYSTEM";
+            return this;
+        }
+
+        public EmailRequestBuilder marketing() {
+            this.emailType = "MARKETING";
+            return this;
+        }
+
+        public EmailRequestBuilder transaction() {
+            this.emailType = "TRANSACTION";
             return this;
         }
 
@@ -298,18 +371,30 @@ public class EmailUtil {
             return this;
         }
 
+        public EmailRequestBuilder userNo(Long userNo) {
+            this.userNo = userNo;
+            return this;
+        }
+
+        public EmailRequestBuilder createdBy(Long createdBy) {
+            this.createdBy = createdBy;
+            return this;
+        }
+
         public EmailRequest build() {
             return EmailRequest.builder()
                     .serviceId(serviceId)
                     .recipient(recipient)
                     .subject(subject)
                     .content(content)
-                    .isHtml(isHtml)
-                    .senderEmail(senderEmail)
+                    .contentType(contentType)
+                    .emailType(emailType)
                     .senderName(senderName)
                     .cc(cc)
                     .bcc(bcc)
                     .recipientName(recipientName)
+                    .userNo(userNo)
+                    .createdBy(createdBy)
                     .build();
         }
     }
@@ -327,11 +412,12 @@ public class EmailUtil {
         private String templateCode;
         private String recipient;
         private Map<String, String> variables = new LinkedHashMap<>();
-        private String senderEmail;
         private String senderName;
         private String cc;
         private String bcc;
         private String recipientName;
+        private Long userNo;
+        private Long createdBy;
 
         public TemplateEmailRequestBuilder serviceId(String serviceId) {
             this.serviceId = serviceId;
@@ -363,11 +449,6 @@ public class EmailUtil {
             return this;
         }
 
-        public TemplateEmailRequestBuilder senderEmail(String senderEmail) {
-            this.senderEmail = senderEmail;
-            return this;
-        }
-
         public TemplateEmailRequestBuilder senderName(String senderName) {
             this.senderName = senderName;
             return this;
@@ -388,17 +469,28 @@ public class EmailUtil {
             return this;
         }
 
+        public TemplateEmailRequestBuilder userNo(Long userNo) {
+            this.userNo = userNo;
+            return this;
+        }
+
+        public TemplateEmailRequestBuilder createdBy(Long createdBy) {
+            this.createdBy = createdBy;
+            return this;
+        }
+
         public TemplateEmailRequest build() {
             return TemplateEmailRequest.builder()
                     .serviceId(serviceId)
                     .templateCode(templateCode)
                     .recipient(recipient)
                     .variables(variables.isEmpty() ? null : variables)
-                    .senderEmail(senderEmail)
                     .senderName(senderName)
                     .cc(cc)
                     .bcc(bcc)
                     .recipientName(recipientName)
+                    .userNo(userNo)
+                    .createdBy(createdBy)
                     .build();
         }
     }
@@ -421,6 +513,9 @@ public class EmailUtil {
         private String recipientName;
         private String customCode;
         private Integer expireMinutes;
+        private String memberType;
+        private Long memberNo;
+        private Long createdBy;
 
         public VerifyEmailRequestBuilder serviceId(String serviceId) {
             this.serviceId = serviceId;
@@ -490,6 +585,56 @@ public class EmailUtil {
             return this;
         }
 
+        /**
+         * 회원 타입 설정 (USER 또는 ADMIN)
+         */
+        public VerifyEmailRequestBuilder memberType(String memberType) {
+            this.memberType = memberType;
+            return this;
+        }
+
+        /**
+         * 회원 타입 설정 (Enum)
+         */
+        public VerifyEmailRequestBuilder memberType(MemberType memberType) {
+            this.memberType = memberType.getCode();
+            return this;
+        }
+
+        /**
+         * 회원 번호 설정 (user_no 또는 admin_no)
+         */
+        public VerifyEmailRequestBuilder memberNo(Long memberNo) {
+            this.memberNo = memberNo;
+            return this;
+        }
+
+        /**
+         * USER 회원 정보 설정 (memberType=USER, memberNo 설정)
+         */
+        public VerifyEmailRequestBuilder memberUser(Long userNo) {
+            this.memberType = MemberType.USER.getCode();
+            this.memberNo = userNo;
+            return this;
+        }
+
+        /**
+         * ADMIN 회원 정보 설정 (memberType=ADMIN, memberNo 설정)
+         */
+        public VerifyEmailRequestBuilder memberAdmin(Long adminNo) {
+            this.memberType = MemberType.ADMIN.getCode();
+            this.memberNo = adminNo;
+            return this;
+        }
+
+        /**
+         * 생성자 (관리자 번호)
+         */
+        public VerifyEmailRequestBuilder createdBy(Long createdBy) {
+            this.createdBy = createdBy;
+            return this;
+        }
+
         public VerifyEmailRequest build() {
             return VerifyEmailRequest.builder()
                     .serviceId(serviceId)
@@ -501,6 +646,9 @@ public class EmailUtil {
                     .recipientName(recipientName)
                     .customCode(customCode)
                     .expireMinutes(expireMinutes)
+                    .memberType(memberType)
+                    .memberNo(memberNo)
+                    .createdBy(createdBy)
                     .build();
         }
     }
@@ -600,6 +748,34 @@ public class EmailUtil {
                 .verifyPurpose(VerifyPurpose.EMAIL_VERIFY)
                 .templateCode(templateCode)
                 .customCode(customCode)
+                .build();
+    }
+
+    /**
+     * USER 회원의 인증 이메일 생성
+     */
+    public static VerifyEmailRequest emailVerifyForUser(String serviceId, String recipient,
+                                                        String templateCode, Long userNo) {
+        return verifyBuilder()
+                .serviceId(serviceId)
+                .recipient(recipient)
+                .verifyPurpose(VerifyPurpose.EMAIL_VERIFY)
+                .templateCode(templateCode)
+                .memberUser(userNo)
+                .build();
+    }
+
+    /**
+     * ADMIN 회원의 인증 이메일 생성
+     */
+    public static VerifyEmailRequest emailVerifyForAdmin(String serviceId, String recipient,
+                                                         String templateCode, Long adminNo) {
+        return verifyBuilder()
+                .serviceId(serviceId)
+                .recipient(recipient)
+                .verifyPurpose(VerifyPurpose.EMAIL_VERIFY)
+                .templateCode(templateCode)
+                .memberAdmin(adminNo)
                 .build();
     }
 }
