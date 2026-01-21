@@ -35,6 +35,13 @@ import java.util.function.Function;
 )
 public class JwtUtil {
 
+
+    private CryptoUtil cryptoUtil;
+
+    public void setCryptoUtil(CryptoUtil cryptoUtil) {
+        this.cryptoUtil = cryptoUtil;
+    }
+
     @Value("${jwt.secret}")
     private String jwtSecret;
 
@@ -83,8 +90,12 @@ public class JwtUtil {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
 
+        // 지시사항: userId 암호화 처리 (방어적 체크)
+        String subjectValue = (cryptoUtil != null && StringUtils.hasText(userId))
+                ? cryptoUtil.encryptUserId(userId) : userId;
+
         JwtBuilder builder = Jwts.builder()
-                .subject(userId)                        // 이메일 또는 "KAKAO:123456"
+                .subject(subjectValue)                  // 암호화된 이메일 또는 "KAKAO:123456"
                 .claim("userNo", userNo)                // 평문 숫자
                 .claim("serviceId", serviceId)
                 .claim("role", role)
@@ -168,7 +179,9 @@ public class JwtUtil {
                 .signWith(getSecretKey(), Jwts.SIG.HS256);
 
         if (StringUtils.hasText(userId)) {
-            builder.claim("userId", userId);            // 선택적으로 userId 추가
+            // 지시사항: userId 암호화 처리
+            String encryptedId = (cryptoUtil != null) ? cryptoUtil.encryptUserId(userId) : userId;
+            builder.claim("userId", encryptedId);            // 선택적으로 userId 추가
         }
 
         return builder.compact();
@@ -217,7 +230,13 @@ public class JwtUtil {
     public String extractUserId(String token) {
         try {
             Claims claims = extractAllClaims(token);
-            return claims.getSubject();
+            String subject = claims.getSubject();
+
+            // 지시사항: 복호화 처리
+            if (cryptoUtil != null && StringUtils.hasText(subject)) {
+                return cryptoUtil.decryptUserId(subject);
+            }
+            return subject;
         } catch (Exception e) {
             log.warn("Failed to extract userId from token", e);
             return null;
