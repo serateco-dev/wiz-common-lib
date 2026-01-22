@@ -5,8 +5,11 @@ import org.mybatis.spring.MyBatisSystemException;
 import org.slf4j.MDC;
 import org.softwiz.platform.iot.common.lib.dto.ErrorResponse;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -38,13 +41,41 @@ public abstract class BaseExceptionHandler {
             WebRequest request) {
 
         String path = extractPath(request);
-        log.error("Database connection failed: {}", path);
+        log.error("Database connection failed: {}", path, ex);
 
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(ErrorResponse.builder()
                         .requestId(getRequestId())
                         .code("DATABASE_CONNECTION_ERROR")
                         .message("데이터베이스 연결 실패")
+                        .path(path)
+                        .build());
+    }
+
+    /**
+     * SQL 문법 오류 처리 (500 Internal Server Error)
+     * - SELECT, INSERT, UPDATE, DELETE 문법 오류
+     * - 테이블/컬럼명 오타
+     * - SQL 키워드 오류
+     */
+    @ExceptionHandler(BadSqlGrammarException.class)
+    public ResponseEntity<ErrorResponse> handleBadSqlGrammarException(
+            BadSqlGrammarException ex,
+            WebRequest request) {
+
+        String path = extractPath(request);
+        String sqlError = ex.getSQLException() != null
+                ? ex.getSQLException().getMessage()
+                : ex.getMessage();
+
+        // 상세 로그: 어떤 SQL이 문제인지 출력
+        log.error("SQL syntax error at [{}]: {} | SQL: {}", path, sqlError, ex.getSql(), ex);
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.builder()
+                        .requestId(getRequestId())
+                        .code("SQL_SYNTAX_ERROR")
+                        .message("SQL 쿼리 문법 오류")
                         .path(path)
                         .build());
     }
@@ -60,12 +91,13 @@ public abstract class BaseExceptionHandler {
             WebRequest request) {
 
         String path = extractPath(request);
+        Throwable rootCause = ex.getRootCause();
+        String detailMessage = (rootCause != null) ? rootCause.getMessage() : ex.getMessage();
 
-        // 내부 원인이 DB 연결 문제인지 확인
+        // 1. DB 연결 문제 체크
         Throwable cause = ex.getCause();
         if (cause instanceof CannotGetJdbcConnectionException) {
-            log.error("MyBatis DB connection failed: {}", path);
-
+            log.error("MyBatis DB connection failed: {} | Detail: {}", path, detailMessage, ex);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(ErrorResponse.builder()
                             .requestId(getRequestId())
@@ -75,8 +107,64 @@ public abstract class BaseExceptionHandler {
                             .build());
         }
 
-        // 그 외 MyBatis 시스템 에러
-        log.error("MyBatis system error: {}", path);
+        // 2. SQL 문법 오류 (MyBatis가 BadSqlGrammarException을 감싼 경우)
+        if (cause instanceof BadSqlGrammarException ||
+                (detailMessage != null &&
+                        (detailMessage.contains("syntax error") ||
+                                detailMessage.contains("SQLSyntaxErrorException") ||
+                                detailMessage.contains("You have an error in your SQL syntax")))) {
+
+            log.error("SQL syntax error wrapped in MyBatis at [{}]: {} | Detail: {}",
+                    path, ex.getMessage(), detailMessage, ex);
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorResponse.builder()
+                            .requestId(getRequestId())
+                            .code("SQL_SYNTAX_ERROR")
+                            .message("SQL 쿼리 문법 오류")
+                            .path(path)
+                            .build());
+        }
+
+        // 3. 테이블/컬럼 존재하지 않음
+        if (detailMessage != null &&
+                (detailMessage.contains("doesn't exist") ||
+                        detailMessage.contains("Unknown column") ||
+                        (detailMessage.contains("Table") && detailMessage.contains("not found")))) {
+
+            log.error("SQL object not found at [{}]: {} | Detail: {}",
+                    path, ex.getMessage(), detailMessage, ex);
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorResponse.builder()
+                            .requestId(getRequestId())
+                            .code("SQL_OBJECT_NOT_FOUND")
+                            .message("테이블 또는 컬럼을 찾을 수 없음")
+                            .path(path)
+                            .build());
+        }
+
+        // 4. 타입 변환 오류
+        if (detailMessage != null &&
+                (detailMessage.contains("Cannot convert") ||
+                        detailMessage.contains("Type mismatch") ||
+                        detailMessage.contains("cannot be cast"))) {
+
+            log.error("MyBatis type mapping error at [{}]: {} | Root cause: {}",
+                    path, ex.getMessage(), detailMessage, ex);
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ErrorResponse.builder()
+                            .requestId(getRequestId())
+                            .code("TYPE_MAPPING_ERROR")
+                            .message("데이터 타입 변환 오류")
+                            .path(path)
+                            .build());
+        }
+
+        // 5. 기타 MyBatis 오류
+        log.error("MyBatis system error at [{}]: {} | Cause: {}",
+                path, ex.getMessage(), detailMessage, ex);
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.builder()
@@ -99,13 +187,28 @@ public abstract class BaseExceptionHandler {
             WebRequest request) {
 
         String path = extractPath(request);
-        log.error("Data access error: {}", path);
+
+        // 구체적인 오류 유형별 처리
+        String errorCode = "DATABASE_ERROR";
+        String errorMessage = "데이터베이스 작업 중 오류";
+
+        if (ex instanceof DuplicateKeyException) {
+            errorCode = "DUPLICATE_KEY_ERROR";
+            errorMessage = "중복된 데이터가 존재합니다";
+            log.warn("Duplicate key error at [{}]", path, ex);
+        } else if (ex instanceof DataIntegrityViolationException) {
+            errorCode = "DATA_INTEGRITY_VIOLATION";
+            errorMessage = "데이터 무결성 제약 위반";
+            log.error("Data integrity violation at [{}]", path, ex);
+        } else {
+            log.error("Data access error at [{}]", path, ex);
+        }
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.builder()
                         .requestId(getRequestId())
-                        .code("DATABASE_ERROR")
-                        .message("데이터베이스 작업 중 오류")
+                        .code(errorCode)
+                        .message(errorMessage)
                         .path(path)
                         .build());
     }
@@ -123,7 +226,7 @@ public abstract class BaseExceptionHandler {
                 .collect(Collectors.joining(", "));
 
         String path = extractPath(request);
-        log.warn("Validation failed: {}", path);
+        log.warn("Validation failed at [{}]: {}", path, errors);
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.builder()
@@ -191,7 +294,7 @@ public abstract class BaseExceptionHandler {
             WebRequest request) {
 
         String path = extractPath(request);
-        log.error("Unexpected error: {}", path);
+        log.error("Unexpected error at [{}]", path, ex);
 
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(ErrorResponse.builder()

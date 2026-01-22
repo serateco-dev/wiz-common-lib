@@ -17,54 +17,68 @@ import java.util.*;
  * <pre>
  * 사용 예시:
  * {@code
- * // 1. 간단한 이메일 발송
+ * // 1. 간단한 HTML 이메일
  * EmailRequest request = EmailUtil.builder()
  *     .serviceId("NEST")
  *     .recipient("user@example.com")
  *     .subject("환영합니다")
  *     .content("<h1>회원가입을 환영합니다!</h1>")
  *     .html()
+ *     .system()
  *     .build();
  *
- * // 2. 텍스트 이메일 발송
+ * // 2. 텍스트 이메일
  * EmailRequest request = EmailUtil.builder()
  *     .serviceId("NEST")
  *     .recipient("user@example.com")
  *     .subject("알림")
  *     .content("시스템 점검 안내입니다.")
  *     .text()
+ *     .system()
  *     .build();
  *
- * // 3. 발신자 정보 지정
+ * // 3. 거래 이메일
  * EmailRequest request = EmailUtil.builder()
  *     .serviceId("NEST")
  *     .recipient("user@example.com")
- *     .subject("공지사항")
- *     .content("중요한 공지사항입니다.")
- *     .senderEmail("notice@example.com")
- *     .senderName("공지팀")
+ *     .recipientName("홍길동")
+ *     .subject("주문 완료")
+ *     .content("<p>주문이 완료되었습니다.</p>")
+ *     .transaction()
+ *     .senderName("주문팀")
  *     .build();
  *
- * // 4. 참조/숨은참조 포함
+ * // 4. 마케팅 이메일 (동의 체크 필요)
+ * EmailRequest request = EmailUtil.builder()
+ *     .serviceId("NEST")
+ *     .recipient("user@example.com")
+ *     .subject("특별 할인 이벤트")
+ *     .content("<h2>최대 50% 할인!</h2>")
+ *     .marketing()
+ *     .build();
+ *
+ * // 5. 참조/숨은참조 포함
  * EmailRequest request = EmailUtil.builder()
  *     .serviceId("NEST")
  *     .recipient("user@example.com")
  *     .subject("회의 초대")
- *     .content("회의에 초대합니다.")
+ *     .content("<p>회의에 초대합니다</p>")
+ *     .system()
  *     .cc("manager@example.com")
  *     .bcc("admin@example.com")
  *     .build();
  *
- * // 5. 템플릿 기반 발송
+ * // 6. 템플릿 기반 발송
  * TemplateEmailRequest request = EmailUtil.templateBuilder()
  *     .serviceId("NEST")
  *     .templateCode("WELCOME")
  *     .recipient("user@example.com")
+ *     .recipientName("홍길동")
  *     .variable("userName", "홍길동")
- *     .variable("serviceName", "WIZ Platform")
+ *     .variable("serviceName", "NEST")
  *     .build();
  *
- * // 6. 템플릿 + 추가 정보
+ * // 7. 템플릿 + 추가 정보
  * TemplateEmailRequest request = EmailUtil.templateBuilder()
  *     .serviceId("NEST")
  *     .templateCode("ORDER_COMPLETE")
@@ -75,61 +89,66 @@ import java.util.*;
  *     .senderName("주문팀")
  *     .build();
  *
- * // 7. 인증 이메일 발송 (회원가입)
+ * // 8. 인증 이메일 발송 (회원가입)
  * VerifyEmailRequest request = EmailUtil.verifyBuilder()
  *     .serviceId("NEST")
  *     .recipient("user@example.com")
- *     .verifyPurpose("SIGNUP")
+ *     .recipientName("홍길동")
+ *     .verifyPurpose(EmailUtil.VerifyPurpose.SIGNUP)
  *     .templateCode("VERIFY_SIGNUP")
  *     .variable("userName", "홍길동")
  *     .build();
  *
- * // 8. 인증 이메일 발송 (비밀번호 재설정)
+ * // 9. 인증 이메일 발송 (비밀번호 재설정)
  * VerifyEmailRequest request = EmailUtil.verifyBuilder()
  *     .serviceId("NEST")
  *     .recipient("user@example.com")
- *     .verifyPurpose("PASSWORD_RESET")
+ *     .verifyPurpose(EmailUtil.VerifyPurpose.PASSWORD_RESET)
  *     .templateCode("VERIFY_PASSWORD_RESET")
  *     .build();
  *
- * // 9. 인증 이메일 발송 (커스텀 코드 지정)
+ * // 10. 인증 이메일 발송 (커스텀 코드 지정)
  * VerifyEmailRequest request = EmailUtil.verifyBuilder()
  *     .serviceId("NEST")
  *     .recipient("user@example.com")
- *     .verifyPurpose("EMAIL_VERIFY")
+ *     .verifyPurpose(EmailUtil.VerifyPurpose.EMAIL_VERIFY)
  *     .templateCode("EMAIL_VERIFICATION")
  *     .customCode("123456")       // 직접 인증 코드 지정
  *     .expireMinutes(5)           // 만료 시간 5분
  *     .variable("userName", "홍길동")
  *     .build();
  *
- * // 10. 인증 이메일 발송 (회원 정보 포함 - USER)
+ * // 11. 인증 이메일 발송 (USER 회원 정보 포함)
  * VerifyEmailRequest request = EmailUtil.verifyBuilder()
  *     .serviceId("NEST")
  *     .recipient("user@example.com")
- *     .verifyPurpose("EMAIL_VERIFY")
+ *     .verifyPurpose(EmailUtil.VerifyPurpose.EMAIL_VERIFY)
  *     .templateCode("EMAIL_VERIFICATION")
  *     .memberUser(1001L)          // memberType=USER, memberNo=1001
  *     .variable("userName", "홍길동")
  *     .build();
  *
- * // 11. 인증 이메일 발송 (회원 정보 포함 - ADMIN)
+ * // 12. 인증 이메일 발송 (ADMIN 회원 정보 포함)
  * VerifyEmailRequest request = EmailUtil.verifyBuilder()
  *     .serviceId("NEST")
  *     .recipient("admin@example.com")
- *     .verifyPurpose("ADMIN_TEMP_PASSWORD")
+ *     .verifyPurpose(EmailUtil.VerifyPurpose.ADMIN_TEMP_PASSWORD)
  *     .templateCode("ADMIN_TEMP_PASSWORD")
  *     .memberAdmin(100L)          // memberType=ADMIN, memberNo=100
  *     .createdBy(1L)              // 생성자 (관리자 번호)
  *     .build();
  *
- * // 12. RestTemplate으로 발송
+ * // 13. RestTemplate으로 발송
  * String emailServiceUrl = "http://wizmessage:8098/api/v2/email/send";
  * ApiResponse response = restTemplate.postForObject(emailServiceUrl, request, ApiResponse.class);
  *
- * // 13. 템플릿 발송
+ * // 14. 템플릿 발송
  * String templateEmailUrl = "http://wizmessage:8098/api/v2/email/template/send";
  * ApiResponse response = restTemplate.postForObject(templateEmailUrl, request, ApiResponse.class);
+ *
+ * // 15. 인증 이메일 발송
+ * String verifyEmailUrl = "http://wizmessage:8098/api/v2/email/verify/send";
+ * ApiResponse response = restTemplate.postForObject(verifyEmailUrl, request, ApiResponse.class);
  * }
  * </pre>
  */
@@ -141,8 +160,47 @@ public class EmailUtil {
     }
 
     // ========================================
-    // 인증 목적 상수
+    // 상수
     // ========================================
+
+    /**
+     * 이메일 타입 (통일)
+     */
+    public enum EmailType {
+        SYSTEM("SYSTEM"),           // 시스템 이메일
+        TRANSACTION("TRANSACTION"), // 거래 이메일
+        VERIFY("VERIFY"),           // 인증 이메일
+        MARKETING("MARKETING");     // 마케팅 이메일
+
+        private final String code;
+
+        EmailType(String code) {
+            this.code = code;
+        }
+
+        public String getCode() {
+            return code;
+        }
+    }
+
+    /**
+     * 동의 유형
+     */
+    public enum ConsentType {
+        EMAIL("EMAIL"),
+        MARKETING_EMAIL("MARKETING_EMAIL"),
+        NEWSLETTER("NEWSLETTER");
+
+        private final String code;
+
+        ConsentType(String code) {
+            this.code = code;
+        }
+
+        public String getCode() {
+            return code;
+        }
+    }
 
     /**
      * 인증 목적 (verifyPurpose)
@@ -202,6 +260,7 @@ public class EmailUtil {
         private String content;
         private String contentType;
         private String emailType;
+        private String consentType;
         private String senderName;
         private String cc;
         private String bcc;
@@ -247,40 +306,32 @@ public class EmailUtil {
         private Map<String, String> variables;
         private String senderName;
         private String recipientName;
-
-        /**
-         * 인증 코드 직접 지정 (null이면 서버에서 6자리 자동 생성)
-         */
         private String customCode;
-
-        /**
-         * 만료 시간 (분, 기본 10분)
-         */
         private Integer expireMinutes;
-
-        /**
-         * 회원 타입 (USER, ADMIN) - 비회원이면 null
-         */
         private String memberType;
-
-        /**
-         * 회원 번호 (user_no 또는 admin_no) - 비회원이면 null
-         */
         private Long memberNo;
-
-        /**
-         * 생성자 (관리자 번호)
-         */
         private Long createdBy;
     }
 
     // ========================================
-    // 일반 이메일 빌더
+    // Builder 팩토리 메서드
     // ========================================
 
     public static EmailRequestBuilder builder() {
         return new EmailRequestBuilder();
     }
+
+    public static TemplateEmailRequestBuilder templateBuilder() {
+        return new TemplateEmailRequestBuilder();
+    }
+
+    public static VerifyEmailRequestBuilder verifyBuilder() {
+        return new VerifyEmailRequestBuilder();
+    }
+
+    // ========================================
+    // 이메일 요청 빌더
+    // ========================================
 
     public static class EmailRequestBuilder {
         private String serviceId;
@@ -288,7 +339,8 @@ public class EmailUtil {
         private String subject;
         private String content;
         private String contentType = "HTML";
-        private String emailType = "SYSTEM";
+        private String emailType;
+        private String consentType;
         private String senderName;
         private String cc;
         private String bcc;
@@ -336,18 +388,39 @@ public class EmailUtil {
             return this;
         }
 
-        public EmailRequestBuilder system() {
-            this.emailType = "SYSTEM";
+        public EmailRequestBuilder emailType(EmailType emailType) {
+            this.emailType = emailType.getCode();
             return this;
         }
 
-        public EmailRequestBuilder marketing() {
-            this.emailType = "MARKETING";
+        public EmailRequestBuilder system() {
+            this.emailType = EmailType.SYSTEM.getCode();
             return this;
         }
 
         public EmailRequestBuilder transaction() {
-            this.emailType = "TRANSACTION";
+            this.emailType = EmailType.TRANSACTION.getCode();
+            return this;
+        }
+
+        public EmailRequestBuilder verify() {
+            this.emailType = EmailType.VERIFY.getCode();
+            return this;
+        }
+
+        public EmailRequestBuilder marketing() {
+            this.emailType = EmailType.MARKETING.getCode();
+            this.consentType = ConsentType.MARKETING_EMAIL.getCode();
+            return this;
+        }
+
+        public EmailRequestBuilder consentType(String consentType) {
+            this.consentType = consentType;
+            return this;
+        }
+
+        public EmailRequestBuilder consentType(ConsentType consentType) {
+            this.consentType = consentType.getCode();
             return this;
         }
 
@@ -389,6 +462,7 @@ public class EmailUtil {
                     .content(content)
                     .contentType(contentType)
                     .emailType(emailType)
+                    .consentType(consentType)
                     .senderName(senderName)
                     .cc(cc)
                     .bcc(bcc)
@@ -400,18 +474,14 @@ public class EmailUtil {
     }
 
     // ========================================
-    // 템플릿 이메일 빌더
+    // 템플릿 이메일 요청 빌더
     // ========================================
-
-    public static TemplateEmailRequestBuilder templateBuilder() {
-        return new TemplateEmailRequestBuilder();
-    }
 
     public static class TemplateEmailRequestBuilder {
         private String serviceId;
         private String templateCode;
         private String recipient;
-        private Map<String, String> variables = new LinkedHashMap<>();
+        private final Map<String, String> variables = new HashMap<>();
         private String senderName;
         private String cc;
         private String bcc;
@@ -496,19 +566,15 @@ public class EmailUtil {
     }
 
     // ========================================
-    // 인증 이메일 빌더
+    // 인증 이메일 요청 빌더
     // ========================================
-
-    public static VerifyEmailRequestBuilder verifyBuilder() {
-        return new VerifyEmailRequestBuilder();
-    }
 
     public static class VerifyEmailRequestBuilder {
         private String serviceId;
         private String recipient;
         private String verifyPurpose;
         private String templateCode;
-        private Map<String, String> variables = new LinkedHashMap<>();
+        private final Map<String, String> variables = new HashMap<>();
         private String senderName;
         private String recipientName;
         private String customCode;
@@ -567,69 +633,43 @@ public class EmailUtil {
             return this;
         }
 
-        /**
-         * 인증 코드 직접 지정
-         * @param customCode 사용할 인증 코드 (null이면 서버에서 6자리 자동 생성)
-         */
         public VerifyEmailRequestBuilder customCode(String customCode) {
             this.customCode = customCode;
             return this;
         }
 
-        /**
-         * 만료 시간 설정
-         * @param expireMinutes 만료 시간 (분, 기본 10분)
-         */
         public VerifyEmailRequestBuilder expireMinutes(Integer expireMinutes) {
             this.expireMinutes = expireMinutes;
             return this;
         }
 
-        /**
-         * 회원 타입 설정 (USER 또는 ADMIN)
-         */
         public VerifyEmailRequestBuilder memberType(String memberType) {
             this.memberType = memberType;
             return this;
         }
 
-        /**
-         * 회원 타입 설정 (Enum)
-         */
         public VerifyEmailRequestBuilder memberType(MemberType memberType) {
             this.memberType = memberType.getCode();
             return this;
         }
 
-        /**
-         * 회원 번호 설정 (user_no 또는 admin_no)
-         */
         public VerifyEmailRequestBuilder memberNo(Long memberNo) {
             this.memberNo = memberNo;
             return this;
         }
 
-        /**
-         * USER 회원 정보 설정 (memberType=USER, memberNo 설정)
-         */
         public VerifyEmailRequestBuilder memberUser(Long userNo) {
             this.memberType = MemberType.USER.getCode();
             this.memberNo = userNo;
             return this;
         }
 
-        /**
-         * ADMIN 회원 정보 설정 (memberType=ADMIN, memberNo 설정)
-         */
         public VerifyEmailRequestBuilder memberAdmin(Long adminNo) {
             this.memberType = MemberType.ADMIN.getCode();
             this.memberNo = adminNo;
             return this;
         }
 
-        /**
-         * 생성자 (관리자 번호)
-         */
         public VerifyEmailRequestBuilder createdBy(Long createdBy) {
             this.createdBy = createdBy;
             return this;
@@ -654,7 +694,7 @@ public class EmailUtil {
     }
 
     // ========================================
-    // 편의 메서드 - 일반 이메일
+    // 편의 메서드
     // ========================================
 
     public static EmailRequest text(String serviceId, String recipient, String subject, String content) {
@@ -664,6 +704,7 @@ public class EmailUtil {
                 .subject(subject)
                 .content(content)
                 .text()
+                .system()
                 .build();
     }
 
@@ -674,6 +715,7 @@ public class EmailUtil {
                 .subject(subject)
                 .content(content)
                 .html()
+                .system()
                 .build();
     }
 
@@ -683,14 +725,33 @@ public class EmailUtil {
                 .recipient(recipient)
                 .subject(subject)
                 .content(content)
+                .system()
                 .senderName("시스템")
                 .html()
                 .build();
     }
 
-    // ========================================
-    // 편의 메서드 - 템플릿 이메일
-    // ========================================
+    public static EmailRequest transaction(String serviceId, String recipient, String subject, String content) {
+        return builder()
+                .serviceId(serviceId)
+                .recipient(recipient)
+                .subject(subject)
+                .content(content)
+                .transaction()
+                .html()
+                .build();
+    }
+
+    public static EmailRequest marketing(String serviceId, String recipient, String subject, String content) {
+        return builder()
+                .serviceId(serviceId)
+                .recipient(recipient)
+                .subject(subject)
+                .content(content)
+                .marketing()
+                .html()
+                .build();
+    }
 
     public static TemplateEmailRequest template(String serviceId, String templateCode,
                                                 String recipient, Map<String, String> variables) {
@@ -701,10 +762,6 @@ public class EmailUtil {
                 .variables(variables)
                 .build();
     }
-
-    // ========================================
-    // 편의 메서드 - 인증 이메일
-    // ========================================
 
     public static VerifyEmailRequest signup(String serviceId, String recipient,
                                             String templateCode, String userName) {
@@ -737,9 +794,6 @@ public class EmailUtil {
                 .build();
     }
 
-    /**
-     * 커스텀 코드로 인증 이메일 생성
-     */
     public static VerifyEmailRequest emailVerifyWithCode(String serviceId, String recipient,
                                                          String templateCode, String customCode) {
         return verifyBuilder()
@@ -751,9 +805,6 @@ public class EmailUtil {
                 .build();
     }
 
-    /**
-     * USER 회원의 인증 이메일 생성
-     */
     public static VerifyEmailRequest emailVerifyForUser(String serviceId, String recipient,
                                                         String templateCode, Long userNo) {
         return verifyBuilder()
@@ -765,9 +816,6 @@ public class EmailUtil {
                 .build();
     }
 
-    /**
-     * ADMIN 회원의 인증 이메일 생성
-     */
     public static VerifyEmailRequest emailVerifyForAdmin(String serviceId, String recipient,
                                                          String templateCode, Long adminNo) {
         return verifyBuilder()
