@@ -201,8 +201,8 @@ public class PushUtil {
     public enum ConsentType {
         PUSH("PUSH"),
         MARKETING_PUSH("MARKETING_PUSH"),
-        NIGHT_PUSH("NIGHT_PUSH");
-
+        NIGHT_PUSH("NIGHT_PUSH"),
+        LOCATION("LOCATION");
         private final String code;
 
         ConsentType(String code) {
