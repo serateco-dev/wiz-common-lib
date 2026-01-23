@@ -60,6 +60,16 @@ import java.util.*;
  *     .imageUrl("https://cdn.example.com/promo.png")
  *     .build();
  *
+ * // 4-1. 야간 푸시 (야간 푸시 동의 체크)
+ * PushRequest request = PushUtil.builder()
+ *     .serviceId("NEST")
+ *     .userNo(1001L)
+ *     .title("긴급 공지")
+ *     .content("야간 시간대 중요 알림입니다")
+ *     .system()
+ *     .consentType(PushUtil.ConsentType.NIGHT_PUSH)
+ *     .build();
+ *
  * // 5. 예약 발송
  * PushRequest request = PushUtil.builder()
  *     .serviceId("NEST")
