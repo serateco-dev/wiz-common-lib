@@ -57,7 +57,7 @@ public class GatewayHeaderInterceptor implements HandlerInterceptor {
         String authHeader = request.getHeader("X-Auth");
         String provider = request.getHeader("X-Provider");
         String nickNameHeader = request.getHeader("X-Nick-Name");
-        String clientIp = request.getHeader("X-Client-Ip");
+        String clientIp = request.getHeader("X-Client-IP");
         String deviceCd = request.getHeader("X-Device-Cd");
         String deviceStr = request.getHeader("X-Device-Str");
 

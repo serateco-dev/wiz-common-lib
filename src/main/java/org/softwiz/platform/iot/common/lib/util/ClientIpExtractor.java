@@ -23,7 +23,7 @@ public class ClientIpExtractor {
      */
     public String extractClientIp(HttpServletRequest request) {
         // 1. 게이트웨이가 추출한 Client IP (가장 정확함)
-        String ip = request.getHeader("X-Client-Ip");
+        String ip = request.getHeader("X-Client-IP");
 
         if (isValidIp(ip)) {
             log.debug("Using Client IP from gateway: {}", ip);
