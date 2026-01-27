@@ -8,12 +8,36 @@ import org.springframework.stereotype.Component;
  * 클라이언트 IP 추출 유틸리티
  *
  * 역할:
- * - 게이트웨이가 전달한 X-Client-Ip 헤더 우선 사용
+ * - 게이트웨이가 전달한 X-Client-IP 헤더 우선 사용
  * - 없을 경우 다양한 프록시 헤더에서 추출 (fallback)
+ *
+ * 헤더 우선순위:
+ * 1. X-Client-IP (Gateway에서 설정)
+ * 2. X-Original-Forwarded-For
+ * 3. X-Forwarded-For
+ * 4. X-Real-IP
+ * 5. Proxy-Client-IP
+ * 6. WL-Proxy-Client-IP
+ * 7. HTTP_CLIENT_IP
+ * 8. HTTP_X_FORWARDED_FOR
+ * 9. RemoteAddr (최종 fallback)
  */
 @Slf4j
 @Component
 public class ClientIpExtractor {
+
+    private static final String[] IP_HEADERS = {
+            "X-Client-IP",
+            "X-Original-Forwarded-For",
+            "X-Forwarded-For",
+            "X-Real-IP",
+            "Proxy-Client-IP",
+            "WL-Proxy-Client-IP",
+            "HTTP_CLIENT_IP",
+            "HTTP_X_FORWARDED_FOR"
+    };
+
+    private static final String UNKNOWN = "unknown";
 
     /**
      * 클라이언트 IP 추출
@@ -22,61 +46,41 @@ public class ClientIpExtractor {
      * @return 클라이언트 IP 주소
      */
     public String extractClientIp(HttpServletRequest request) {
-        // 1. 게이트웨이가 추출한 Client IP (가장 정확함)
-        String ip = request.getHeader("X-Client-IP");
-
-        if (isValidIp(ip)) {
-            log.debug("Using Client IP from gateway: {}", ip);
-            return ip;
+        if (request == null) {
+            return UNKNOWN;
         }
 
-        // 2. 게이트웨이를 거치지 않은 경우 자체 추출 (fallback)
-        log.debug("X-Client-Ip header missing, extracting from request headers");
-        return extractFromHeaders(request);
-    }
-
-    /**
-     * 다양한 프록시 헤더에서 IP 추출
-     *
-     * @param request HTTP 요청
-     * @return 추출된 IP 주소
-     */
-    private String extractFromHeaders(HttpServletRequest request) {
-        // 우선순위대로 헤더 검사
-        String[] headerNames = {
-                "X-Forwarded-For",
-                "Proxy-Client-IP",
-                "WL-Proxy-Client-IP",
-                "HTTP_CLIENT_IP",
-                "HTTP_X_FORWARDED_FOR",
-                "X-Real-IP"
-        };
-
-        for (String headerName : headerNames) {
-            String ip = request.getHeader(headerName);
+        for (String header : IP_HEADERS) {
+            String ip = request.getHeader(header);
             if (isValidIp(ip)) {
-                // X-Forwarded-For는 여러 IP가 있을 수 있음 (첫 번째가 실제 클라이언트)
-                if (ip.contains(",")) {
-                    ip = ip.split(",")[0].trim();
-                }
-                log.debug("Client IP extracted from header {}: {}", headerName, ip);
-                return ip;
+                String extractedIp = extractFirstIp(ip);
+                log.trace("Client IP from {}: {}", header, extractedIp);
+                return extractedIp;
             }
         }
 
-        // 모든 헤더에서 찾지 못한 경우 Remote Address 사용
         String remoteAddr = request.getRemoteAddr();
-        log.debug("Client IP extracted from RemoteAddr: {}", remoteAddr);
-        return remoteAddr != null ? remoteAddr : "unknown";
+        log.trace("Client IP from RemoteAddr: {}", remoteAddr);
+        return remoteAddr != null ? remoteAddr : UNKNOWN;
+    }
+
+    /**
+     * X-Forwarded-For 등 여러 IP가 포함된 경우 첫 번째 IP 추출
+     */
+    private String extractFirstIp(String ip) {
+        if (ip == null) {
+            return UNKNOWN;
+        }
+        if (ip.contains(",")) {
+            return ip.split(",")[0].trim();
+        }
+        return ip.trim();
     }
 
     /**
      * 유효한 IP인지 검증
-     *
-     * @param ip 검증할 IP
-     * @return 유효하면 true
      */
     private boolean isValidIp(String ip) {
-        return ip != null && !ip.isEmpty() && !"unknown".equalsIgnoreCase(ip);
+        return ip != null && !ip.isEmpty() && !UNKNOWN.equalsIgnoreCase(ip);
     }
 }
