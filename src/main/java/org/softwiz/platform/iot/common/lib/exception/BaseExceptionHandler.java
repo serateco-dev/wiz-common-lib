@@ -9,6 +9,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotWritableException;
 import org.springframework.jdbc.BadSqlGrammarException;
 import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.validation.FieldError;
@@ -301,6 +302,26 @@ public abstract class BaseExceptionHandler {
                         .requestId(getRequestId())
                         .code("INTERNAL_ERROR")
                         .message("서버 내부 오류")
+                        .path(path)
+                        .build());
+    }
+
+    @ExceptionHandler(HttpMessageNotWritableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotWritableException(
+            HttpMessageNotWritableException ex,
+            WebRequest request) {
+
+        String path = extractPath(request);
+        String contentType = ex.getMessage();
+
+        log.warn("Response conversion failed at [{}]: {} - This is usually harmless for SSE/WebSocket",
+                path, contentType);
+
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ErrorResponse.builder()
+                        .requestId(getRequestId())
+                        .code("RESPONSE_CONVERSION_ERROR")
+                        .message("응답 변환 실패")
                         .path(path)
                         .build());
     }
