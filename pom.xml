@@ -27,6 +27,8 @@
 		<maven.compiler.target>17</maven.compiler.target>
 		<mybatis.version>3.0.5</mybatis.version>
 		<jjwt.version>0.12.6</jjwt.version>
+		<shedlock.version>6.0.2</shedlock.version>
+		<hikaricp.version>5.1.0</hikaricp.version>
 	</properties>
 
 	<dependencies>
@@ -52,19 +54,46 @@
 			<scope>provided</scope>
 		</dependency>
 
-		<!-- Spring JDBC (provided) - DAO 예외 처리용 추가 -->
+		<!-- Spring JDBC (provided) - DAO 예외 처리용 -->
 		<dependency>
 			<groupId>org.springframework</groupId>
 			<artifactId>spring-jdbc</artifactId>
 			<scope>provided</scope>
 		</dependency>
 
-		<!-- MyBatis (provided) - TypeHandler 지원용 -->
+		<!-- MyBatis (provided, optional) - TypeHandler 지원용 -->
 		<dependency>
 			<groupId>org.mybatis.spring.boot</groupId>
 			<artifactId>mybatis-spring-boot-starter</artifactId>
 			<version>${mybatis.version}</version>
 			<scope>provided</scope>
+			<optional>true</optional>
+		</dependency>
+
+		<!-- ShedLock (provided, optional) - 스케줄러 있는 서비스에서만 사용 -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>${shedlock.version}</version>
+			<scope>provided</scope>
+			<optional>true</optional>
+		</dependency>
+
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-jdbc-template</artifactId>
+			<version>${shedlock.version}</version>
+			<scope>provided</scope>
+			<optional>true</optional>
+		</dependency>
+
+		<!-- HikariCP (provided, optional) - DataSource 복구 기능용 -->
+		<dependency>
+			<groupId>com.zaxxer</groupId>
+			<artifactId>HikariCP</artifactId>
+			<version>${hikaricp.version}</version>
+			<scope>provided</scope>
+			<optional>true</optional>
 		</dependency>
 
 		<!-- JWT -->
