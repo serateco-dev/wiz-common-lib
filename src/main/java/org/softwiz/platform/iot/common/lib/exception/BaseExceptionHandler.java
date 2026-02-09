@@ -83,8 +83,9 @@ public abstract class BaseExceptionHandler {
 
     /**
      * MyBatis 시스템 예외 처리
-     * - MyBatisSystemException은 주로 DB 연결 문제를 감싸고 있음
-     * - 내부 원인에 따라 503 또는 500으로 분기
+     * - MyBatisSystemException은 DB 연결 문제 등을 여러 겹으로 감싸고 있음
+     * - 예외 체인: MyBatisSystemException → PersistenceException → CannotGetJdbcConnectionException
+     * - getCause()가 아닌 전체 예외 체인을 탐색하여 정확한 원인 파악
      */
     @ExceptionHandler(MyBatisSystemException.class)
     public ResponseEntity<ErrorResponse> handleMyBatisSystemException(
@@ -95,9 +96,8 @@ public abstract class BaseExceptionHandler {
         Throwable rootCause = ex.getRootCause();
         String detailMessage = (rootCause != null) ? rootCause.getMessage() : ex.getMessage();
 
-        // 1. DB 연결 문제 체크
-        Throwable cause = ex.getCause();
-        if (cause instanceof CannotGetJdbcConnectionException) {
+        // 1. DB 연결 문제 체크 (예외 체인 전체 탐색)
+        if (containsCause(ex, CannotGetJdbcConnectionException.class)) {
             log.error("MyBatis DB connection failed: {} | Detail: {}", path, detailMessage, ex);
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(ErrorResponse.builder()
@@ -108,8 +108,8 @@ public abstract class BaseExceptionHandler {
                             .build());
         }
 
-        // 2. SQL 문법 오류 (MyBatis가 BadSqlGrammarException을 감싼 경우)
-        if (cause instanceof BadSqlGrammarException ||
+        // 2. SQL 문법 오류 (예외 체인 전체 탐색)
+        if (containsCause(ex, BadSqlGrammarException.class) ||
                 (detailMessage != null &&
                         (detailMessage.contains("syntax error") ||
                                 detailMessage.contains("SQLSyntaxErrorException") ||
@@ -324,6 +324,33 @@ public abstract class BaseExceptionHandler {
                         .message("응답 변환 실패")
                         .path(path)
                         .build());
+    }
+
+    // ========================================
+    // 유틸리티 메서드
+    // ========================================
+
+    /**
+     * 예외 체인에서 특정 타입의 원인이 존재하는지 확인
+     *
+     * MyBatis 예외는 여러 겹으로 감싸져 있어 getCause()만으로는 부족함
+     * 예: MyBatisSystemException → PersistenceException → CannotGetJdbcConnectionException
+     *
+     * @param ex 검사할 예외
+     * @param causeType 찾으려는 원인 예외 타입
+     * @return 해당 타입이 예외 체인에 존재하면 true
+     */
+    protected boolean containsCause(Throwable ex, Class<? extends Throwable> causeType) {
+        Throwable current = ex;
+        int depth = 0;
+        while (current != null && depth < 20) {
+            if (causeType.isInstance(current)) {
+                return true;
+            }
+            current = current.getCause();
+            depth++;
+        }
+        return false;
     }
 
     /**
