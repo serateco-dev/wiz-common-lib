@@ -100,28 +100,47 @@ public class GatewaySignatureValidator {
             return true;
         }
 
-        // 5. 전체 URI 구성 (쿼리 파라미터 포함)
+        // 5. 전체 URI 구성
+        // Gateway가 서명 생성에 사용한 원본 URI를 우선 사용 (인코딩 차이로 인한 불일치 방지)
+        String gatewayUri = request.getHeader("X-Gateway-Request-URI");
         String requestUri = request.getRequestURI();
         String queryString = request.getQueryString();
-        String fullUri = queryString != null ? requestUri + "?" + queryString : requestUri;
+        String serviceUri = queryString != null ? requestUri + "?" + queryString : requestUri;
         String method = request.getMethod();
+
+        // Gateway 헤더가 있으면 해당 URI로 검증 (서명 생성 시 사용된 동일한 URI)
+        String fullUri;
+        if (gatewayUri != null && !gatewayUri.isBlank()) {
+            fullUri = gatewayUri;
+            if (!gatewayUri.equals(serviceUri)) {
+                log.debug("URI differs - using Gateway header for validation | gateway='{}' | service='{}'",
+                        gatewayUri, serviceUri);
+            }
+        } else {
+            fullUri = serviceUri;
+            log.debug("X-Gateway-Request-URI header not present, using service URI: {}", serviceUri);
+        }
 
         // 6. Gateway 서명 검증
         String expectedSignature = generateSignature(method, fullUri, timestamp);
         boolean isValid = expectedSignature.equals(signature);
 
         if (isValid) {
-            log.trace("Gateway signature validated successfully");
+            log.trace("Gateway signature validated successfully | method={} | uri={}", method, fullUri);
         } else {
-            log.warn("Gateway signature mismatch - Method: {}, URI: {}", method, fullUri);
+            log.warn("Gateway signature mismatch | method={} | uri={}", method, fullUri);
 
             if (log.isDebugEnabled()) {
-                log.debug("Expected signature: {}", expectedSignature);
-                log.debug("Actual signature: {}", signature);
+                log.debug("Signature detail | expected='{}' | actual='{}'", expectedSignature, signature);
+                log.debug("URI detail | gatewayHeader='{}' | serviceUri='{}' | usedUri='{}'",
+                        gatewayUri, serviceUri, fullUri);
 
-                String gatewayUri = request.getHeader("X-Gateway-Request-URI");
-                if (gatewayUri != null && !gatewayUri.equals(fullUri)) {
-                    log.debug("URI mismatch - Gateway: '{}', Service: '{}'", gatewayUri, fullUri);
+                // Gateway 헤더 없이 serviceUri로도 재검증 시도하여 원인 파악
+                if (gatewayUri != null && !gatewayUri.equals(serviceUri)) {
+                    String altSignature = generateSignature(method, serviceUri, timestamp);
+                    if (altSignature.equals(signature)) {
+                        log.debug("Signature WOULD match with serviceUri - encoding difference confirmed");
+                    }
                 }
             }
         }

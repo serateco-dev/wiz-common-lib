@@ -720,14 +720,18 @@ public class EmailClient {
 
                 headers.set("X-Gateway-Signature", signature);
                 headers.set("X-Gateway-Timestamp", timestamp);
+                // 서명 생성에 사용한 URI를 함께 전달 (Validator에서 동일한 URI로 검증하도록)
+                headers.set("X-Gateway-Request-URI", uri);
 
-                log.debug("내부 서비스 호출용 서명 생성 완료 - method: {}, uri: {}, timestamp: {}, signature: {}...",
-                        method, uri, timestamp, signature.substring(0, Math.min(10, signature.length())));
+                if (log.isDebugEnabled()) {
+                    log.debug("[EmailClient] 내부 서비스 호출용 서명 생성 완료 | method={} | uri={} | timestamp={} | signature={}...",
+                            method, uri, timestamp, signature.substring(0, Math.min(10, signature.length())));
+                }
             } catch (Exception e) {
-                log.error("Gateway 헤더 생성 실패", e);
+                log.error("[EmailClient] Gateway 헤더 생성 실패 | method={} | uri={}", method, uri, e);
             }
         } else {
-            log.warn("Gateway 헤더 생성 불가 - signatureValidator가 null입니다. " +
+            log.warn("[EmailClient] Gateway 헤더 생성 불가 - signatureValidator가 null입니다. " +
                     "EmailClient 생성 시 GatewaySignatureValidator를 주입하세요.");
         }
 
