@@ -761,6 +761,18 @@ public class PushUtil {
                 .build();
     }
 
+    public static PushRequest info(String serviceId, Long userNo, String title, String content, String linkUrl) {
+        return builder()
+                .serviceId(serviceId)
+                .userNo(userNo)
+                .title(title)
+                .content(content)
+                .pushType(PushType.SYSTEM)
+                .warnDiv(WarnDiv.INFO)
+                .linkUrl(linkUrl)
+                .build();
+    }
+
     public static PushRequest warning(String serviceId, Long userNo, String content) {
         return builder()
                 .serviceId(serviceId)
@@ -769,6 +781,18 @@ public class PushUtil {
                 .content(content)
                 .pushType(PushType.SYSTEM)
                 .warnDiv(WarnDiv.WARNING)
+                .build();
+    }
+
+    public static PushRequest warning(String serviceId, Long userNo, String content, String linkUrl) {
+        return builder()
+                .serviceId(serviceId)
+                .userNo(userNo)
+                .title("경고")
+                .content(content)
+                .pushType(PushType.SYSTEM)
+                .warnDiv(WarnDiv.WARNING)
+                .linkUrl(linkUrl)
                 .build();
     }
 
@@ -783,6 +807,18 @@ public class PushUtil {
                 .build();
     }
 
+    public static PushRequest danger(String serviceId, Long userNo, String content, String linkUrl) {
+        return builder()
+                .serviceId(serviceId)
+                .userNo(userNo)
+                .title("위험")
+                .content(content)
+                .pushType(PushType.SYSTEM)
+                .warnDiv(WarnDiv.DANGER)
+                .linkUrl(linkUrl)
+                .build();
+    }
+
     public static PushRequest system(String serviceId, Long userNo, String title, String content) {
         return builder()
                 .serviceId(serviceId)
@@ -794,6 +830,18 @@ public class PushUtil {
                 .build();
     }
 
+    public static PushRequest system(String serviceId, Long userNo, String title, String content, String linkUrl) {
+        return builder()
+                .serviceId(serviceId)
+                .userNo(userNo)
+                .title(title)
+                .content(content)
+                .pushType(PushType.SYSTEM)
+                .warnDiv(WarnDiv.INFO)
+                .linkUrl(linkUrl)
+                .build();
+    }
+
     public static PushRequest transaction(String serviceId, Long userNo, String title, String content) {
         return builder()
                 .serviceId(serviceId)
@@ -802,6 +850,18 @@ public class PushUtil {
                 .content(content)
                 .pushType(PushType.TRANSACTION)
                 .warnDiv(WarnDiv.INFO)
+                .build();
+    }
+
+    public static PushRequest transaction(String serviceId, Long userNo, String title, String content, String linkUrl) {
+        return builder()
+                .serviceId(serviceId)
+                .userNo(userNo)
+                .title(title)
+                .content(content)
+                .pushType(PushType.TRANSACTION)
+                .warnDiv(WarnDiv.INFO)
+                .linkUrl(linkUrl)
                 .build();
     }
 
@@ -871,6 +931,21 @@ public class PushUtil {
                 .pushType(PushType.MARKETING)
                 .consentType(ConsentType.MARKETING_PUSH)
                 .warnDiv(WarnDiv.INFO)
+                .build();
+    }
+
+    public static PushRequest marketing(String serviceId, Long userNo, String title, String content,
+                                        String linkUrl, String imageUrl) {
+        return builder()
+                .serviceId(serviceId)
+                .userNo(userNo)
+                .title(title)
+                .content(content)
+                .pushType(PushType.MARKETING)
+                .consentType(ConsentType.MARKETING_PUSH)
+                .warnDiv(WarnDiv.INFO)
+                .linkUrl(linkUrl)
+                .imageUrl(imageUrl)
                 .build();
     }
 
