@@ -3,6 +3,7 @@ package org.softwiz.platform.iot.common.lib.util;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -35,12 +36,8 @@ import java.util.function.Function;
 )
 public class JwtUtil {
 
-
+    @Autowired
     private CryptoUtil cryptoUtil;
-
-    public void setCryptoUtil(CryptoUtil cryptoUtil) {
-        this.cryptoUtil = cryptoUtil;
-    }
 
     @Value("${jwt.secret}")
     private String jwtSecret;
@@ -90,9 +87,7 @@ public class JwtUtil {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expiration);
 
-        // 지시사항: userId 암호화 처리 (방어적 체크)
-        String subjectValue = (cryptoUtil != null && StringUtils.hasText(userId))
-                ? cryptoUtil.encryptUserId(userId) : userId;
+        String subjectValue = cryptoUtil.encryptUserId(userId);
 
         JwtBuilder builder = Jwts.builder()
                 .subject(subjectValue)                  // 암호화된 이메일 또는 "KAKAO:123456"
@@ -179,9 +174,7 @@ public class JwtUtil {
                 .signWith(getSecretKey(), Jwts.SIG.HS256);
 
         if (StringUtils.hasText(userId)) {
-            // 지시사항: userId 암호화 처리
-            String encryptedId = (cryptoUtil != null) ? cryptoUtil.encryptUserId(userId) : userId;
-            builder.claim("userId", encryptedId);            // 선택적으로 userId 추가
+            builder.claim("userId", cryptoUtil.encryptUserId(userId));
         }
 
         return builder.compact();
@@ -231,9 +224,7 @@ public class JwtUtil {
         try {
             Claims claims = extractAllClaims(token);
             String subject = claims.getSubject();
-
-            // 지시사항: 복호화 처리
-            if (cryptoUtil != null && StringUtils.hasText(subject)) {
+            if (StringUtils.hasText(subject)) {
                 return cryptoUtil.decryptUserId(subject);
             }
             return subject;
@@ -262,7 +253,6 @@ public class JwtUtil {
 
     /**
      * 복합 권한 추출 (숫자/문자열 혼합 가능)
-     *
      *
      * @param token JWT 토큰
      * @return 권한 리스트 (모두 String으로 변환)
@@ -353,7 +343,6 @@ public class JwtUtil {
             return null;
         }
     }
-
 
     public String extractDeviceCd(String token) {
         try {

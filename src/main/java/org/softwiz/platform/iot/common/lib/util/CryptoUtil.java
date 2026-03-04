@@ -116,11 +116,15 @@ public class CryptoUtil {
         try {
             String decrypted = decrypt(encryptedUserId);
             if (decrypted == null || decrypted.isEmpty()) {
-                throw new IllegalStateException("Decryption returned null for userId");
+                // 복호화 실패 시 평문으로 fallback (기존 미암호화 토큰 과도기 대응)
+                log.warn("decryptUserId fallback to plaintext - value may not be encrypted");
+                return encryptedUserId;
             }
             return decrypted;
         } catch (RuntimeException e) {
-            throw new IllegalStateException("Failed to decrypt userId", e);
+            // 복호화 실패 시 평문으로 fallback (기존 미암호화 토큰 과도기 대응)
+            log.warn("decryptUserId fallback to plaintext - value may not be encrypted");
+            return encryptedUserId;
         }
     }
 }
