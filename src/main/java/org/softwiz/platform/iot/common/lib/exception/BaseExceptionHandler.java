@@ -198,9 +198,29 @@ public abstract class BaseExceptionHandler {
             errorMessage = "중복된 데이터가 존재합니다";
             log.warn("Duplicate key error at [{}]", path, ex);
         } else if (ex instanceof DataIntegrityViolationException) {
-            errorCode = "DATA_INTEGRITY_VIOLATION";
-            errorMessage = "데이터 무결성 제약 위반";
-            log.error("Data integrity violation at [{}]", path, ex);
+            String rootMsg = ex.getMostSpecificCause().getMessage();
+
+            // Data too long: 컬럼 용량 초과 (이미지 base64 등)
+            if (rootMsg != null && rootMsg.contains("Data too long for column")) {
+                errorCode = "DATA_TOO_LONG";
+                errorMessage = "데이터 길이 제한을 초과했습니다.";
+                log.warn("Data too long at [{}]: {}", path, rootMsg);
+                // NOT NULL 제약 위반
+            } else if (rootMsg != null && rootMsg.contains("cannot be null")) {
+                errorCode = "NOT_NULL_VIOLATION";
+                errorMessage = "필수 항목 누락";
+                log.warn("Not null violation at [{}]: {}", path, rootMsg);
+                // FK 제약 위반
+            } else if (rootMsg != null && rootMsg.contains("foreign key constraint")) {
+                errorCode = "FOREIGN_KEY_VIOLATION";
+                errorMessage = "참조 데이터가 존재하지 않습니다";
+                log.warn("Foreign key violation at [{}]: {}", path, rootMsg);
+                // 기타 무결성 위반
+            } else {
+                errorCode = "DATA_INTEGRITY_VIOLATION";
+                errorMessage = "데이터 무결성 제약 위반";
+                log.error("Data integrity violation at [{}]: {}", path, rootMsg, ex);
+            }
         } else {
             log.error("Data access error at [{}]", path, ex);
         }
