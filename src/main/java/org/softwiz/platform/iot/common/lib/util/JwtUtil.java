@@ -144,43 +144,25 @@ public class JwtUtil {
     /**
      * Refresh Token 생성 (기본 유효기간)
      *
-     * @param userNo 사용자 시스템 번호
-     * @param userId 이메일 주소 또는 "provider:id" (NULL 가능)
+     * @param userNo    사용자 시스템 번호
+     * @param userId    이메일 주소 또는 "provider:id" (NULL 가능)
+     * @param serviceId 서비스 ID
      * @return JWT Refresh Token
      */
-    public String generateRefreshToken(Long userNo, String userId, String serviceId, long expirationTime) {
-        Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + expirationTime);
-
-        JwtBuilder builder = Jwts.builder()
-                .subject(String.valueOf(userNo))
-                .claim("userNo", userNo)
-                .claim("tokenType", "refresh")
-                .issuer(issuer)
-                .issuedAt(now)
-                .expiration(expiryDate)
-                .signWith(getSecretKey(), Jwts.SIG.HS256);
-
-        if (StringUtils.hasText(userId)) {
-            builder.claim("userId", cryptoUtil.encryptUserId(userId));
-        }
-
-        if (StringUtils.hasText(serviceId)) {
-            builder.claim("serviceId", serviceId);  // serviceId 추가
-        }
-
-        return builder.compact();
+    public String generateRefreshToken(Long userNo, String userId, String serviceId) {
+        return generateRefreshToken(userNo, userId, serviceId, refreshExpiration);
     }
 
     /**
      * Refresh Token 생성 (유효기간 지정)
      *
-     * @param userNo 사용자 시스템 번호
-     * @param userId 이메일 주소 또는 "provider:id" (NULL 가능)
+     * @param userNo         사용자 시스템 번호
+     * @param userId         이메일 주소 또는 "provider:id" (NULL 가능)
+     * @param serviceId      서비스 ID
      * @param expirationTime 유효기간 (밀리초)
      * @return JWT Refresh Token
      */
-    public String generateRefreshToken(Long userNo, String userId, long expirationTime) {
+    public String generateRefreshToken(Long userNo, String userId, String serviceId, long expirationTime) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expirationTime);
 
@@ -195,6 +177,10 @@ public class JwtUtil {
 
         if (StringUtils.hasText(userId)) {
             builder.claim("userId", cryptoUtil.encryptUserId(userId));
+        }
+
+        if (StringUtils.hasText(serviceId)) {
+            builder.claim("serviceId", serviceId);
         }
 
         return builder.compact();
