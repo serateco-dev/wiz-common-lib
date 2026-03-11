@@ -147,14 +147,15 @@ public class JwtUtil {
      * @param userNo    사용자 시스템 번호
      * @param userId    이메일 주소 또는 "provider:id" (NULL 가능)
      * @param serviceId 서비스 ID
+     * @param role      사용자 권한
      * @return JWT Refresh Token
      */
-    public String generateRefreshToken(Long userNo, String userId, String serviceId) {
-        return generateRefreshToken(userNo, userId, serviceId, refreshExpiration);
+    public String generateRefreshToken(Long userNo, String userId, String serviceId, String role) {
+        return generateRefreshToken(userNo, userId, serviceId, role, refreshExpiration);
     }
 
     /**
-     * Refresh Token 생성 (유효기간 지정, serviceId 없음)
+     * Refresh Token 생성 (유효기간 지정, serviceId/role 없음)
      *
      * @param userNo         사용자 시스템 번호
      * @param userId         이메일 주소 또는 "provider:id" (NULL 가능)
@@ -162,7 +163,7 @@ public class JwtUtil {
      * @return JWT Refresh Token
      */
     public String generateRefreshToken(Long userNo, String userId, long expirationTime) {
-        return generateRefreshToken(userNo, userId, null, expirationTime);
+        return generateRefreshToken(userNo, userId, null, null, expirationTime);
     }
 
     /**
@@ -171,10 +172,11 @@ public class JwtUtil {
      * @param userNo         사용자 시스템 번호
      * @param userId         이메일 주소 또는 "provider:id" (NULL 가능)
      * @param serviceId      서비스 ID
+     * @param role           사용자 권한
      * @param expirationTime 유효기간 (밀리초)
      * @return JWT Refresh Token
      */
-    public String generateRefreshToken(Long userNo, String userId, String serviceId, long expirationTime) {
+    public String generateRefreshToken(Long userNo, String userId, String serviceId, String role, long expirationTime) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + expirationTime);
 
@@ -193,6 +195,10 @@ public class JwtUtil {
 
         if (StringUtils.hasText(serviceId)) {
             builder.claim("serviceId", serviceId);
+        }
+
+        if (StringUtils.hasText(role)) {
+            builder.claim("role", role);
         }
 
         return builder.compact();
