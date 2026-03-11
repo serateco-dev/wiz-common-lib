@@ -148,8 +148,28 @@ public class JwtUtil {
      * @param userId 이메일 주소 또는 "provider:id" (NULL 가능)
      * @return JWT Refresh Token
      */
-    public String generateRefreshToken(Long userNo, String userId) {
-        return generateRefreshToken(userNo, userId, refreshExpiration);
+    public String generateRefreshToken(Long userNo, String userId, String serviceId, long expirationTime) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + expirationTime);
+
+        JwtBuilder builder = Jwts.builder()
+                .subject(String.valueOf(userNo))
+                .claim("userNo", userNo)
+                .claim("tokenType", "refresh")
+                .issuer(issuer)
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(getSecretKey(), Jwts.SIG.HS256);
+
+        if (StringUtils.hasText(userId)) {
+            builder.claim("userId", cryptoUtil.encryptUserId(userId));
+        }
+
+        if (StringUtils.hasText(serviceId)) {
+            builder.claim("serviceId", serviceId);  // serviceId 추가
+        }
+
+        return builder.compact();
     }
 
     /**
