@@ -154,6 +154,18 @@ public class JwtUtil {
     }
 
     /**
+     * Refresh Token 생성 (유효기간 지정, serviceId 없음)
+     *
+     * @param userNo         사용자 시스템 번호
+     * @param userId         이메일 주소 또는 "provider:id" (NULL 가능)
+     * @param expirationTime 유효기간 (밀리초)
+     * @return JWT Refresh Token
+     */
+    public String generateRefreshToken(Long userNo, String userId, long expirationTime) {
+        return generateRefreshToken(userNo, userId, null, expirationTime);
+    }
+
+    /**
      * Refresh Token 생성 (유효기간 지정)
      *
      * @param userNo         사용자 시스템 번호
