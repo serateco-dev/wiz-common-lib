@@ -274,6 +274,10 @@ public class MaskingUtil {
 
     /**
      * 사용자 ID 마스킹
+     * - 이메일 형식이면 maskEmail() 위임
+     * - 3자 이하: 전체 마스킹
+     * - 4~8자: 앞 3자 + ***  (예: user123 → use***)
+     * - 9자 이상: *** + 끝 5자 (예: administrator → ***rator)
      */
     public String maskUserId(String userId) {
         if (userId == null || userId.isEmpty()) {
@@ -284,11 +288,17 @@ public class MaskingUtil {
             return maskEmail(userId);
         }
 
-        if (userId.length() > 12) {
-            return userId.substring(0, 12) + "...";
+        int len = userId.length();
+
+        if (len <= 3) {
+            return "***";
         }
 
-        return userId;
+        if (len <= 8) {
+            return userId.substring(0, 3) + "***";
+        }
+
+        return "***" + userId.substring(len - 5);
     }
 
     /**
