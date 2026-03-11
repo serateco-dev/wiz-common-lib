@@ -306,6 +306,31 @@ public abstract class BaseExceptionHandler {
     }
 
     /**
+     * 파일 크기 초과 예외 처리 (400 Bad Request)
+     *
+     * MaxUploadSizeExceededException은 Tomcat/Spring이 서비스 레이어 진입 전
+     * multipart 파싱 단계에서 던지므로 서비스 내부 검증 코드까지 도달하지 못함.
+     * spring.servlet.multipart.max-file-size / max-request-size 설정값 초과 시 발생.
+     */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSizeExceededException(
+            org.springframework.web.multipart.MaxUploadSizeExceededException ex,
+            WebRequest request) {
+
+        String path = extractPath(request);
+        log.warn("File size exceeded at [{}]: maxSize={}, cause={}",
+                path, ex.getMaxUploadSize(), ex.getMostSpecificCause().getMessage());
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ErrorResponse.builder()
+                        .requestId(getRequestId())
+                        .code("FILE_SIZE_EXCEEDED")
+                        .message("파일 크기는 5MB를 초과할 수 없습니다.")
+                        .path(path)
+                        .build());
+    }
+
+    /**
      * 일반 예외 처리
      * 다른 핸들러가 먼저 처리하도록 마지막 순서로 배치
      */
