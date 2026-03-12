@@ -325,7 +325,7 @@ public abstract class BaseExceptionHandler {
                 .body(ErrorResponse.builder()
                         .requestId(getRequestId())
                         .code("FILE_SIZE_EXCEEDED")
-                        .message("파일 크기는 5MB를 초과할 수 없습니다.")
+                        .message("파일 크기가 초과 되었습니다.")
                         .path(path)
                         .build());
     }
