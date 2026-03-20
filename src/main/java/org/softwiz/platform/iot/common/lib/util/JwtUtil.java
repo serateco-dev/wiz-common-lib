@@ -20,11 +20,12 @@ import java.util.function.Function;
  * JWT 토큰 생성 및 검증 유틸리티 (SSO)
  *
  * 설계 원칙:
- * - JWT Claims: 전부 평문 저장
- * - 암호화는 프론트 응답 시에만 (AuthService에서 처리)
+ * - userId: JWT 생성 시 CryptoUtil.encryptUserId()로 암호화하여 subject에 저장
+ * - userId 추출 시: subject를 CryptoUtil.decryptUserId()로 복호화하여 반환
+ * - Refresh Token userId claim: CryptoUtil.encryptUserId()로 암호화하여 저장
  * - userNo: 평문 숫자
- * - userId: 평문 이메일
  * - auth: 복합 권한 (숫자/문자열 혼합 가능, String으로 통일)
+ * - 응답 DTO의 userId 암호화는 AuthService.buildAuthResponse()에서 별도 처리
  */
 @Slf4j
 @Component
@@ -61,9 +62,11 @@ public class JwtUtil {
 
     /**
      * Access Token 생성
+     * - userId는 CryptoUtil.encryptUserId()로 암호화하여 subject에 저장
+     * - userId를 별도 claim으로 저장하지 않음 (subject에서 복호화하여 사용)
      *
      * @param userNo 사용자 시스템 번호 (예: 12345)
-     * @param userId 이메일 주소 또는 "provider:id" (예: "user@example.com", "KAKAO:123456")
+     * @param userId 이메일 주소 또는 "PROVIDER:id" 평문 (예: "user@example.com", "KAKAO:123456") - 내부에서 암호화됨
      * @param serviceId 서비스 ID
      * @param role 권한
      * @param auth 복합 권한 리스트 (숫자, 문자열 혼합 가능 - 예: [1, 2, "ADMIN", "USER"])
@@ -143,9 +146,10 @@ public class JwtUtil {
 
     /**
      * Refresh Token 생성 (기본 유효기간)
+     * - userId는 CryptoUtil.encryptUserId()로 암호화하여 userId claim에 저장
      *
      * @param userNo    사용자 시스템 번호
-     * @param userId    이메일 주소 또는 "provider:id" (NULL 가능)
+     * @param userId    이메일 주소 또는 "PROVIDER:id" 평문 (NULL 가능) - 내부에서 암호화됨
      * @param serviceId 서비스 ID
      * @param role      사용자 권한
      * @param nickName  닉네임
@@ -157,9 +161,10 @@ public class JwtUtil {
 
     /**
      * Refresh Token 생성 (유효기간 지정, serviceId/role 없음)
+     * - userId는 CryptoUtil.encryptUserId()로 암호화하여 userId claim에 저장
      *
      * @param userNo         사용자 시스템 번호
-     * @param userId         이메일 주소 또는 "provider:id" (NULL 가능)
+     * @param userId         이메일 주소 또는 "PROVIDER:id" 평문 (NULL 가능) - 내부에서 암호화됨
      * @param expirationTime 유효기간 (밀리초)
      * @return JWT Refresh Token
      */
@@ -169,9 +174,10 @@ public class JwtUtil {
 
     /**
      * Refresh Token 생성 (유효기간 지정)
+     * - userId는 CryptoUtil.encryptUserId()로 암호화하여 userId claim에 저장
      *
      * @param userNo         사용자 시스템 번호
-     * @param userId         이메일 주소 또는 "provider:id" (NULL 가능)
+     * @param userId         이메일 주소 또는 "PROVIDER:id" 평문 (NULL 가능) - 내부에서 암호화됨
      * @param serviceId      서비스 ID
      * @param role           사용자 권한
      * @param nickName       닉네임
@@ -247,8 +253,10 @@ public class JwtUtil {
     }
 
     /**
-     * userId 추출 (이메일 또는 provider:id)
-     * @return userId (예: "user@example.com" 또는 "KAKAO:123456")
+     * userId 추출 (이메일 또는 PROVIDER:id)
+     * - subject에 암호화된 값을 CryptoUtil.decryptUserId()로 복호화하여 반환
+     *
+     * @return userId 평문 (예: "user@example.com" 또는 "KAKAO:123456")
      */
     public String extractUserId(String token) {
         try {
