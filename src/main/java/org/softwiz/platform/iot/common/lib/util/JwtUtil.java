@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -26,6 +27,7 @@ import java.util.function.Function;
  * - userNo: 평문 숫자
  * - auth: 복합 권한 (숫자/문자열 혼합 가능, String으로 통일)
  * - 응답 DTO의 userId 암호화는 AuthService.buildAuthResponse()에서 별도 처리
+ * - jti: 토큰 발급 시 자동 생성 (UUID) - 추후 Redis 기반 Stateful 전환 대비
  */
 @Slf4j
 @Component
@@ -64,6 +66,7 @@ public class JwtUtil {
      * Access Token 생성
      * - userId는 CryptoUtil.encryptUserId()로 암호화하여 subject에 저장
      * - userId를 별도 claim으로 저장하지 않음 (subject에서 복호화하여 사용)
+     * - jti: UUID 자동 생성 (추후 Redis 기반 Stateful 전환 시 활용)
      *
      * @param userNo 사용자 시스템 번호 (예: 12345)
      * @param userId 이메일 주소 또는 "PROVIDER:id" 평문 (예: "user@example.com", "KAKAO:123456") - 내부에서 암호화됨
@@ -93,6 +96,7 @@ public class JwtUtil {
         String subjectValue = cryptoUtil.encryptUserId(userId);
 
         JwtBuilder builder = Jwts.builder()
+                .id(UUID.randomUUID().toString())       // jti: 토큰 고유 ID (추후 Redis Stateful 전환 대비)
                 .subject(subjectValue)                  // 암호화된 이메일 또는 "KAKAO:123456"
                 .claim("userNo", userNo)                // 평문 숫자
                 .claim("serviceId", serviceId)
@@ -147,6 +151,7 @@ public class JwtUtil {
     /**
      * Refresh Token 생성 (기본 유효기간)
      * - userId는 CryptoUtil.encryptUserId()로 암호화하여 userId claim에 저장
+     * - jti: UUID 자동 생성 (추후 Redis Stateful 전환 시 활용)
      *
      * @param userNo    사용자 시스템 번호
      * @param userId    이메일 주소 또는 "PROVIDER:id" 평문 (NULL 가능) - 내부에서 암호화됨
@@ -175,6 +180,7 @@ public class JwtUtil {
     /**
      * Refresh Token 생성 (유효기간 지정)
      * - userId는 CryptoUtil.encryptUserId()로 암호화하여 userId claim에 저장
+     * - jti: UUID 자동 생성 (추후 Redis Stateful 전환 시 활용)
      *
      * @param userNo         사용자 시스템 번호
      * @param userId         이메일 주소 또는 "PROVIDER:id" 평문 (NULL 가능) - 내부에서 암호화됨
@@ -189,6 +195,7 @@ public class JwtUtil {
         Date expiryDate = new Date(now.getTime() + expirationTime);
 
         JwtBuilder builder = Jwts.builder()
+                .id(UUID.randomUUID().toString())       // jti: 토큰 고유 ID (추후 Redis Stateful 전환 대비)
                 .subject(String.valueOf(userNo))        // Refresh Token은 userNo를 subject로
                 .claim("userNo", userNo)
                 .claim("tokenType", "refresh")
@@ -281,6 +288,22 @@ public class JwtUtil {
             return claims.get("nickName", String.class);
         } catch (Exception e) {
             log.warn("Failed to extract nickName from token", e);
+            return null;
+        }
+    }
+
+    /**
+     * jti 추출 (토큰 고유 ID)
+     * 추후 Redis 기반 Stateful 전환 시 활용
+     *
+     * @return jti (UUID 문자열)
+     */
+    public String extractJti(String token) {
+        try {
+            Claims claims = extractAllClaims(token);
+            return claims.getId();
+        } catch (Exception e) {
+            log.warn("Failed to extract jti from token", e);
             return null;
         }
     }
