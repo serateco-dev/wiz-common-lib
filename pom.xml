@@ -12,7 +12,7 @@
 		<relativePath/>
 	</parent>
 
-	<groupId>com.github.serateco-dev</groupId>
+	<groupId>com.github.softwiz-platform</groupId>
 	<artifactId>wiz-common-lib</artifactId>
 	<version>1.0.0</version>
 	<packaging>jar</packaging>
