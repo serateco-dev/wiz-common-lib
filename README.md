@@ -48,8 +48,8 @@ jwt:
 
 # 암호화 설정
 crypto:
-  secret-key: ${CRYPTO_SECRET_KEY}  # 32 bytes
-  iv: ${CRYPTO_IV}                  # 16 bytes
+  secret-key: ${CRYPTO_SECRET_KEY} 
+  iv: ${CRYPTO_IV}                 
 
 # Gateway 서명 검증
 gateway:
